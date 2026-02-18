@@ -1,0 +1,73 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+
+interface ApiOptions {
+  method?: string;
+  body?: unknown;
+  token?: string | null;
+}
+
+export async function api<T = unknown>(endpoint: string, options: ApiOptions = {}): Promise<T> {
+  const { method = 'GET', body, token } = options;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.message || 'Something went wrong');
+  }
+
+  return data as T;
+}
+
+// Auth helpers
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('token');
+}
+
+export function setToken(token: string, user?: User): void {
+  localStorage.setItem('token', token);
+  if (user) {
+    localStorage.setItem('user', JSON.stringify(user));
+  }
+}
+
+export function removeToken(): void {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+}
+
+// Types
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface Task {
+  _id: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'completed';
+  dueDate: string | null;
+  owner: string;
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}

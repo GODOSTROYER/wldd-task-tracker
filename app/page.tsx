@@ -1,6 +1,6 @@
 "use client";
 
-import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
+import { useUser } from "@/lib/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,6 +18,7 @@ import {
   Trello,
 } from "lucide-react";
 import Navbar from "@/components/navbar";
+import Link from "next/link";
 
 export default function HomePage() {
   const { isSignedIn, user } = useUser();
@@ -41,7 +42,7 @@ export default function HomePage() {
     {
       icon: Shield,
       title: "Secure",
-      description: "Enterprise-grade security with Clerk authentication",
+      description: "Enterprise-grade security with JWT authentication",
     },
   ];
 
@@ -65,12 +66,12 @@ export default function HomePage() {
 
           {!isSignedIn && (
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <SignUpButton>
+              <Link href="/signup">
                 <Button size="lg" className="text-lg px-8">
                   Start for free
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
-              </SignUpButton>
+              </Link>
               <Button variant="outline" size="lg" className="text-lg px-8">
                 Watch demo
               </Button>
@@ -124,12 +125,12 @@ export default function HomePage() {
           </p>
 
           {!isSignedIn && (
-            <SignUpButton>
+            <Link href="/signup">
               <Button size="lg" variant="secondary" className="text-lg px-8">
                 Start your free trial
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
-            </SignUpButton>
+            </Link>
           )}
         </div>
       </section>
@@ -144,7 +145,7 @@ export default function HomePage() {
             </div>
             <div className="flex items-center space-x-6 text-sm text-gray-400">
               <span>© 2024 TrelloClone. All rights reserved.</span>
-              <span>Built with Next.js & Clerk</span>
+              <span>Built with Next.js</span>
             </div>
           </div>
         </div>

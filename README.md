@@ -1,346 +1,151 @@
----
+# Mini Task Tracker
 
-# Build a Trello Clone App with Next.js & Supabase
+A full-stack task management app built with **Next.js 15**, **Express**, **MongoDB**, and **Redis**.
 
-<div align="center">
-  <br />
-  <a href="https://youtu.be/ugxI1o5SyMs" target="_blank">
-   <img width="1280" height="720" alt="Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of Copy of 10,000 REACT COMPONENTS" src="https://github.com/user-attachments/assets/819fc9b5-713e-4fbe-b659-dc1067d4bd82" />
+## Tech Stack
 
-  </a>
-  <br />
-  <div>
-    <img src="https://img.shields.io/badge/-Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
-    <img src="https://img.shields.io/badge/-Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
-    <img src="https://img.shields.io/badge/-Clerk-0072CE?style=for-the-badge&logo=clerk&logoColor=white" alt="Clerk" />
-    <img src="https://img.shields.io/badge/-@dnd--kit-FAB005?style=for-the-badge&logo=react&logoColor=white" alt="dnd-kit" />
-    <img src="https://img.shields.io/badge/-TailwindCSS-06B6D4?style=for-the-badge&logo=tailwindcss" alt="Tailwind CSS" />
-  </div>
-  <h3 align="center">Build a Trello‑Style App with Next.js, Supabase, Clerk & dnd‑kit</h3>
-  <div align="center">
-    Follow the full video tutorial on  
-    <a href="https://youtu.be/YOUR_VIDEO_ID" target="_blank"><b>YouTube</b></a>
-  </div>
-  <br />
-</div>
+| Layer    | Technology                                                |
+| -------- | --------------------------------------------------------- |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, shadcn/ui |
+| Backend  | Node.js, Express, TypeScript, Zod validation              |
+| Database | MongoDB (Mongoose ODM)                                    |
+| Caching  | Redis (ioredis)                                           |
+| Auth     | JWT + bcrypt, email verification via Resend               |
+| Testing  | Jest, Supertest, mongodb-memory-server, ioredis-mock      |
 
-## 📋 Table of Contents
+## Features
 
-1. [Introduction](#-introduction)
-2. [Tech Stack](#-tech-stack)
-3. [Features](#-features)
-4. [Quick Start](#-quick-start)
-5. [Screenshots](#-screenshots)
-6. [Deployment](#-deployment)
+- **JWT Authentication** — signup, login, email verification (6-digit OTP), forgot/reset password
+- **Task CRUD** — create, read, update, delete tasks with ownership guards
+- **Redis Caching** — `GET /api/tasks` cached per user; invalidated on every mutation
+- **Mongoose Indexes** — on `owner` and `status` fields for query performance
+- **Optimistic UI** — instant feedback on create/update/delete/toggle
+- **Task Filtering** — by status, date range, and free-text search
+- **Password Strength** — live requirement indicators (8+ chars, uppercase, special character)
 
----
+## Project Structure
 
-## 🚀 Introduction
+```
+.
+├── app/                  # Next.js pages (login, signup, verify-email, tasks, etc.)
+├── components/           # Shared React components (navbar, UI primitives)
+├── lib/                  # API helper, auth context
+├── server/               # Express backend
+│   ├── src/
+│   │   ├── __tests__/    # Jest test suites
+│   │   ├── config/       # Redis + DB config
+│   │   ├── middleware/    # Auth + cache middleware
+│   │   ├── models/       # Mongoose schemas (User, Task)
+│   │   ├── routes/       # Express routes (auth, tasks)
+│   │   ├── utils/        # Email service (Resend)
+│   │   ├── app.ts        # Express app setup
+│   │   └── server.ts     # Server entry point
+│   ├── .env.example
+│   └── package.json
+├── .env.example
+└── package.json
+```
 
-In this tutorial, you’ll learn how to build a production‑ready **Trello‑Style App** using **Next.js**, **Supabase**, **Clerk**, **dnd‑kit**, and **TailwindCSS**. You’ll implement **real‑time data**, **authentication & billing**, **drag‑and‑drop**, and **filtering**, all deployed to Vercel.
-
-🎥 Watch the full tutorial: [YouTube](https://youtu.be/ugxI1o5SyMs)
-
----
-
-## ⚙️ Tech Stack
-
-* **Next.js** – React framework with file‑based routing & server components
-* **Supabase** – Hosted Postgres, real‑time subscriptions & Storage
-* **Clerk** – Authentication & subscription billing integration
-* **@dnd-kit** – Flexible drag‑and‑drop primitives
-* **TailwindCSS** – Utility‑first styling
-* **TypeScript** – Static typing and developer tooling
-
----
-
-## ⚡️ Features
-
-* 📋 **Boards & Columns**
-  Create multiple boards and define custom columns.
-
-* ➕ **Dynamic Tasks**
-  Add, edit and delete tasks with title, description, assignee, priority & due date.
-
-* 🔄 **Drag & Drop**
-  Reorder tasks and move them between columns with smooth animations.
-
-* 📡 **Real‑Time Updates**
-  Changes sync instantly across clients via Supabase subscriptions.
-
-* 🔍 **Filtering**
-  Filter tasks by priority, due date, and search within a board.
-
-* 🔐 **Auth & Billing**
-  Sign up / log in with Clerk and upgrade your plan to create unlimited boards.
-
-* 🚀 **One‑Click Deployment**
-  Deploy the app on Vercel with environment variables for Supabase & Clerk.
-
----
-
-## 👌 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-* [Node.js](https://nodejs.org/) (v16+)
-* [Supabase CLI](https://supabase.com/docs/guides/cli)
-* Supabase project (URL & ANON key)
-* Clerk account (Publishable & Secret keys)
+- Node.js 18+
+- MongoDB (Atlas or local)
+- Redis (local or cloud)
+- [Resend](https://resend.com) API key (free tier works)
 
-### Supabase SQL Statements:
-* Creates **helper function**, **tables** (`boards`, `columns`, `tasks`)
-* Adds FKs, defaults, and useful indexes
-* Enables **RLS**
-* Adds all **policies** you described (plus the missing `boards` ones)
-
-```sql
--- =========================================================
--- 0. Helper: get the requesting user's id from JWT
--- =========================================================
-CREATE OR REPLACE FUNCTION requesting_user_id()
-RETURNS text AS $$
-  SELECT NULLIF(
-    current_setting('request.jwt.claims', true)::json->>'sub',
-    ''
-  )::text;
-$$ LANGUAGE SQL STABLE;
-
--- =========================================================
--- 1. Tables
--- =========================================================
-
--- Boards
-CREATE TABLE IF NOT EXISTS public.boards (
-  id          bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  updated_at  timestamptz NOT NULL DEFAULT now(),
-  title       text NOT NULL,
-  description text,
-  color       text,
-  user_id     text NOT NULL
-);
-
--- Columns
-CREATE TABLE IF NOT EXISTS public.columns (
-  id          bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  board_id    bigint NOT NULL REFERENCES public.boards(id) ON DELETE CASCADE,
-  title       text NOT NULL,
-  sort_order  int4 NOT NULL DEFAULT 0,
-  user_id     text NOT NULL
-);
-
--- Tasks
-CREATE TABLE IF NOT EXISTS public.tasks (
-  id          bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  title       text NOT NULL,
-  description text,
-  assignee    text,
-  due_date    date,
-  priority    text,
-  sort_order  int4 NOT NULL DEFAULT 0,
-  column_id   bigint NOT NULL REFERENCES public.columns(id) ON DELETE CASCADE
-);
-
--- Optional: keep boards.updated_at fresh
-CREATE OR REPLACE FUNCTION public.set_updated_at()
-RETURNS trigger AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_boards_updated_at ON public.boards;
-CREATE TRIGGER trg_boards_updated_at
-BEFORE UPDATE ON public.boards
-FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
--- Helpful indexes
-CREATE INDEX IF NOT EXISTS idx_columns_board_id ON public.columns(board_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_column_id  ON public.tasks(column_id);
-
--- =========================================================
--- 2. Enable Row Level Security
--- =========================================================
-ALTER TABLE public.boards  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.columns ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tasks   ENABLE ROW LEVEL SECURITY;
-
--- =========================================================
--- 3. Policies
--- =========================================================
-
---------------------------
--- BOARDS TABLE POLICIES
---------------------------
-
--- View own boards
-CREATE POLICY "Users can view their own boards"
-ON public.boards
-FOR SELECT
-USING (user_id = requesting_user_id()::text);
-
--- Insert own boards
-CREATE POLICY "Users can insert their own boards"
-ON public.boards
-FOR INSERT
-WITH CHECK (requesting_user_id() = user_id);
-
--- Update own boards
-CREATE POLICY "Users can update their own boards"
-ON public.boards
-FOR UPDATE
-USING (user_id = requesting_user_id())
-WITH CHECK (user_id = requesting_user_id());
-
--- Delete own boards
-CREATE POLICY "Users can delete their own boards"
-ON public.boards
-FOR DELETE
-USING (user_id = requesting_user_id());
-
---------------------------
--- COLUMNS TABLE POLICIES
---------------------------
-
--- Users can view columns from their own boards
-CREATE POLICY "Users can view columns from their own boards" ON public.columns
-FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM public.boards
-    WHERE boards.id = columns.board_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-
--- Users can insert columns into their own boards
-CREATE POLICY "Users can insert columns into their own boards" ON public.columns
-FOR INSERT WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.boards
-    WHERE boards.id = columns.board_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-
--- Users can update columns from their own boards
-CREATE POLICY "Users can update columns from their own boards" ON public.columns
-FOR UPDATE USING (
-  EXISTS (
-    SELECT 1 FROM public.boards
-    WHERE boards.id = columns.board_id
-      AND boards.user_id = requesting_user_id()
-  )
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.boards
-    WHERE boards.id = columns.board_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-
--- Users can delete columns from their own boards
-CREATE POLICY "Users can delete columns from their own boards" ON public.columns
-FOR DELETE USING (
-  EXISTS (
-    SELECT 1 FROM public.boards
-    WHERE boards.id = columns.board_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-
------------------------
--- TASKS TABLE POLICIES
------------------------
-
--- Users can view tasks from their own boards
-CREATE POLICY "Users can view tasks from their own boards" ON public.tasks
-FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM public.columns
-    JOIN public.boards ON boards.id = columns.board_id
-    WHERE columns.id = tasks.column_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-
--- Users can insert tasks into their own boards
-CREATE POLICY "Users can insert tasks into their own boards" ON public.tasks
-FOR INSERT WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.columns
-    JOIN public.boards ON boards.id = columns.board_id
-    WHERE columns.id = tasks.column_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-
--- Users can update tasks from their own boards
-CREATE POLICY "Users can update tasks from their own boards" ON public.tasks
-FOR UPDATE USING (
-  EXISTS (
-    SELECT 1 FROM public.columns
-    JOIN public.boards ON boards.id = columns.board_id
-    WHERE columns.id = tasks.column_id
-      AND boards.user_id = requesting_user_id()
-  )
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.columns
-    JOIN public.boards ON boards.id = columns.board_id
-    WHERE columns.id = tasks.column_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-
--- Users can delete tasks from their own boards
-CREATE POLICY "Users can delete tasks from their own boards" ON public.tasks
-FOR DELETE USING (
-  EXISTS (
-    SELECT 1 FROM public.columns
-    JOIN public.boards ON boards.id = columns.board_id
-    WHERE columns.id = tasks.column_id
-      AND boards.user_id = requesting_user_id()
-  )
-);
-```
-
-### Clone and Run
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/trello-clone-next-supabase.git
-cd trello-clone-next-supabase
-npm install
+git clone https://github.com/<your-username>/wldd-task-tracker.git
+cd wldd-task-tracker
 ```
 
-1. Copy `.env.example` to `.env.local` and fill in your Supabase & Clerk credentials.
-2. Start local Supabase emulation (optional):
+### 2. Backend setup
 
-   ```bash
-   supabase start
-   supabase db push
-   ```
-3. Run the development server:
+```bash
+cd server
+npm install
+cp .env.example .env
+# Edit .env with your MongoDB URI, Redis URL, JWT secret, and Resend API key
+npm run dev
+```
 
-   ```bash
-   npm run dev
-   ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+The API server starts at `http://localhost:5000`.
 
----
+### 3. Frontend setup
 
-## 🔗 Useful Links
+```bash
+# From root directory
+npm install
+cp .env.example .env.local
+# Edit .env.local if your backend runs on a different port
+npm run dev
+```
 
-* [Next.js Docs](https://nextjs.org/docs)
-* [Supabase Docs](https://supabase.com/docs)
-* [Clerk Docs](https://clerk.com/docs)
-* [dnd-kit Docs](https://docs.dndkit.com/)
-* [Tailwind CSS Docs](https://tailwindcss.com/docs)
-* [Vercel](https://vercel.com/)
+The frontend starts at `http://localhost:3000`.
 
----
+## Environment Variables
+
+### Backend (`server/.env`)
+
+| Variable         | Description                    | Example                  |
+| ---------------- | ------------------------------ | ------------------------ |
+| `PORT`           | Server port                    | `5000`                   |
+| `MONGO_URI`      | MongoDB connection string      | `mongodb+srv://...`      |
+| `REDIS_URL`      | Redis connection URL           | `redis://localhost:6379` |
+| `JWT_SECRET`     | Secret for signing JWTs        | `your_secret_here`       |
+| `RESEND_API_KEY` | Resend API key for emails      | `re_xxxx...`             |
+| `FROM_EMAIL`     | Sender email address           | `onboarding@resend.dev`  |
+| `FRONTEND_URL`   | Frontend URL (for reset links) | `http://localhost:3000`  |
+
+### Frontend (`.env.local`)
+
+| Variable                   | Description     | Example                 |
+| -------------------------- | --------------- | ----------------------- |
+| `NEXT_PUBLIC_API_BASE_URL` | Backend API URL | `http://localhost:5000` |
+
+## API Endpoints
+
+### Auth
+
+| Method | Endpoint                    | Description                       |
+| ------ | --------------------------- | --------------------------------- |
+| POST   | `/api/auth/signup`          | Register (sends verification OTP) |
+| POST   | `/api/auth/verify-email`    | Verify email with OTP             |
+| POST   | `/api/auth/resend-otp`      | Resend verification OTP           |
+| POST   | `/api/auth/login`           | Login (JWT-based)                 |
+| POST   | `/api/auth/forgot-password` | Send password reset email         |
+| POST   | `/api/auth/reset-password`  | Reset password with token         |
+
+### Tasks (requires `Authorization: Bearer <token>`)
+
+| Method | Endpoint         | Description                  |
+| ------ | ---------------- | ---------------------------- |
+| GET    | `/api/tasks`     | List tasks (cached in Redis) |
+| POST   | `/api/tasks`     | Create a task                |
+| PUT    | `/api/tasks/:id` | Update a task                |
+| DELETE | `/api/tasks/:id` | Delete a task                |
+
+## Testing
+
+```bash
+cd server
+
+# Run tests
+npm test
+
+# Run with coverage report
+npm run test:coverage
+```
+
+Tests use **mongodb-memory-server** (in-memory MongoDB) and **ioredis-mock** (Redis mock) — no external services needed.
+
+### Coverage Target
+
+Configured for **≥ 70%** on statements, branches, functions, and lines.
+
+## License
+
+MIT
