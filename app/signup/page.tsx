@@ -11,11 +11,8 @@ import { Label } from '@/components/ui/label';
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
-import { ArrowRight, Trello } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -37,7 +34,7 @@ export default function SignupPage() {
       });
       console.log('Registration successful:', data);
       router.push(`/verify-email?email=${encodeURIComponent(email)}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Registration failed';
       setError(message);
     } finally {

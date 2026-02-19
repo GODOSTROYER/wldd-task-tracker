@@ -3,8 +3,6 @@
 import { useUser } from "@/lib/contexts/AuthContext";
 import {
   ArrowLeft,
-  Filter,
-  Layout,
   LogOut,
   MoreHorizontal,
   Settings,
@@ -14,7 +12,6 @@ import {
 import { Button } from "./ui/button";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Badge } from "./ui/badge";
 import { ModeToggle } from "./mode-toggle";
 import {
   DropdownMenu,
@@ -30,15 +27,14 @@ interface Props {
   boardTitle?: string;
   onEditBoard?: () => void;
   onFilterClick?: () => void;
-  filterCount?: number;
   children?: React.ReactNode; // For extra controls like background chooser
 }
 
 export default function Navbar({
   boardTitle,
   onEditBoard,
-  onFilterClick,
-  filterCount = 0,
+  // onFilterClick,
+  // filterCount = 0,
   children,
 }: Props) {
   const { isSignedIn, user, signOut } = useUser();
@@ -55,10 +51,10 @@ export default function Navbar({
     return (
       <header className="border-b border-white/20 bg-white/30 backdrop-blur-xl sticky top-0 z-50 shadow-sm transition-all">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="flex items-center space-x-2">
-          <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-            <Layout className="h-5 w-5" />
-          </div>
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                <Trello className="h-5 w-5" />
+              </div>
           <span className="text-xl font-bold text-gray-900 dark:text-white">
             Task Tracker
           </span>

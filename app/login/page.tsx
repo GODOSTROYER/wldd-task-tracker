@@ -11,7 +11,7 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
-import { ArrowRight, Trello } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function LoginPage() {
       console.log('Login successful:', data);
       setToken(data.token, data.user);
       router.push('/workspaces');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
       if (message.includes('verify your email')) {
         // Redirect to verify-email page

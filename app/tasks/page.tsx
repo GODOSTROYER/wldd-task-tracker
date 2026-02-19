@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, getToken, type Task } from "@/lib/api";
-import { useUser } from "@/lib/contexts/AuthContext";
+// import { useUser } from "@/lib/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -342,8 +342,6 @@ function CreateTaskDialog({ open, onClose, initialStatus, onCreate }: CreateTask
 // ─── Board view components ────────────────────────────────────────────────────
 
 function TaskCard({ task, onEdit }: { task: Task; onEdit?: () => void }) {
-  const meta = STATUS_META[task.status] ?? STATUS_META["todo"];
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
   return (
     <div className="group/card bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-100 hover:ring-1 hover:ring-blue-100 transition-all duration-150 cursor-grab active:cursor-grabbing space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -505,7 +503,7 @@ function ListView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask:
 
 type SortKey = "title" | "status" | "dueDate" | "createdAt" | "priority";
 
-function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
+function TableView({ tasks, onEditTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
   const [sortKey, setSortKey]   = useState<SortKey>("status");
   const [sortDir, setSortDir]   = useState<"asc" | "desc">("asc");
 
@@ -626,7 +624,7 @@ function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask
 
 // ─── Timeline View ────────────────────────────────────────────────────────────
 
-function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
+function TimelineView({ tasks, onEditTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -641,7 +639,7 @@ function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditT
       return { start, end };
     }
     const dates = datedTasks.map(t => new Date(t.dueDate!));
-    let minD = new Date(Math.min(...dates.map(d => d.getTime())));
+    const minD = new Date(Math.min(...dates.map(d => d.getTime())));
     let maxD = new Date(Math.max(...dates.map(d => d.getTime())));
     minD.setDate(minD.getDate() - 4);
     if (maxD.getTime() - minD.getTime() < 29 * 86400000) maxD = new Date(minD.getTime() + 30 * 86400000);
@@ -810,7 +808,7 @@ function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditT
 interface TasksPageProps { workspaceId?: string; }
 
 export default function TasksPage({ workspaceId }: TasksPageProps) {
-  const { user } = useUser();
+  // const { user } = useUser();
   const token  = getToken();
   const router = useRouter();
 
@@ -964,7 +962,7 @@ export default function TasksPage({ workspaceId }: TasksPageProps) {
               <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border border-gray-100 shadow-xl" showCloseButton={false}>
                 <div className="h-1.5 bg-red-500 w-full" />
                 <div className="px-6 py-5 space-y-4">
-                  <DialogHeader><DialogTitle className="text-gray-900">Delete "{workspaceName}"?</DialogTitle></DialogHeader>
+                  <DialogHeader><DialogTitle className="text-gray-900">Delete &quot;{workspaceName}&quot;?</DialogTitle></DialogHeader>
                   <p className="text-sm text-gray-500 leading-relaxed">This will permanently delete the workspace and all its tasks. This action cannot be undone.</p>
                   <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                     <Button variant="ghost" onClick={() => setShowDeleteDialog(false)} className="rounded-xl">Cancel</Button>

@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useUser } from "@/lib/contexts/AuthContext";
-import { api, updateProfile } from "@/lib/api";
+import { updateProfile } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Save, User as UserIcon, Lock, CheckCircle2 } from "lucide-react";
+import { Loader2, User as UserIcon, Lock, CheckCircle2 } from "lucide-react";
 
 export default function SettingsPage() {
-  const { user, login } = useUser();
+  const { user } = useUser();
   const [name, setName] = useState(user?.name || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -34,7 +34,7 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      const res = await updateProfile({
+      await updateProfile({
         name: name !== user?.name ? name : undefined,
         password: password || undefined,
       });
@@ -60,8 +60,12 @@ export default function SettingsPage() {
        // Force reload to update context if we can't update it directly
        setTimeout(() => window.location.reload(), 1000);
 
-    } catch (err: any) {
-      setError(err.message || "Failed to update profile");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to update profile");
+      }
     } finally {
       setLoading(false);
     }

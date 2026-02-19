@@ -3,14 +3,6 @@
 import { useUser } from "@/lib/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  CheckSquare,
   Users,
   Zap,
   Shield,
@@ -33,28 +25,7 @@ export default function HomePage() {
     }
   }, [isSignedIn, router]);
 
-  const features = [
-    {
-      icon: CheckSquare,
-      title: "Task Management",
-      description: "Organize your tasks with intuitive drag-and-drop boards",
-    },
-    {
-      icon: Users,
-      title: "Team Collaboration",
-      description: "Work together with your team in real-time",
-    },
-    {
-      icon: Zap,
-      title: "Lightning Fast",
-      description: "Built with Next.js 15 for optimal performance",
-    },
-    {
-      icon: Shield,
-      title: "Secure",
-      description: "Enterprise-grade security with JWT authentication",
-    },
-  ];
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">

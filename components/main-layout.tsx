@@ -1,11 +1,10 @@
 "use client";
 
-import { useUser } from "@/lib/contexts/AuthContext";
+// import { useUser } from "@/lib/contexts/AuthContext";
 import { Sidebar } from "@/components/sidebar";
 import { usePathname } from "next/navigation";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const { isSignedIn } = useUser();
   const pathname = usePathname();
   
   // Don't show sidebar on login/register pages
