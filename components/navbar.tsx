@@ -3,63 +3,109 @@
 import { useUser } from "@/lib/contexts/AuthContext";
 import {
   ArrowLeft,
-  ArrowRight,
   Filter,
+  LogOut,
   MoreHorizontal,
+  Settings,
   Trello,
+  User,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Badge } from "./ui/badge";
-import { removeToken } from "@/lib/api";
+import { ModeToggle } from "./mode-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "./ui/avatar";
 
 interface Props {
   boardTitle?: string;
   onEditBoard?: () => void;
-
   onFilterClick?: () => void;
   filterCount?: number;
+  children?: React.ReactNode; // For extra controls like background chooser
 }
+
 export default function Navbar({
   boardTitle,
   onEditBoard,
   onFilterClick,
   filterCount = 0,
+  children,
 }: Props) {
   const { isSignedIn, user, signOut } = useUser();
   const pathname = usePathname();
-  const router = useRouter();
 
   const isDashboardPage = pathname === "/dashboard" || pathname === "/tasks";
   const isBoardPage = pathname.startsWith("/boards/");
 
+  const userInitials = user?.firstName
+    ? user.firstName.slice(0, 2).toUpperCase()
+    : user?.emailAddresses[0]?.emailAddress.slice(0, 2).toUpperCase();
+
   if (isDashboardPage) {
     return (
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Trello className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-            <span className="text-xl sm:text-2xl font-bold text-gray-900">
-              Task Tracker
-            </span>
+      <header className="border-b border-white/20 bg-white/30 backdrop-blur-xl sticky top-0 z-50 shadow-sm transition-all">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+        <Link href="/" className="flex items-center space-x-2">
+          <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+            <Layout className="h-5 w-5" />
           </div>
+          <span className="text-xl font-bold text-gray-900 dark:text-white">
+            Task Tracker
+          </span>
+        </Link>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
+            {children}
+            <ModeToggle />
+
             {isSignedIn && (
-              <div className="flex items-center space-x-3">
-                <span className="text-sm text-gray-600 hidden sm:block">
-                  {user?.firstName ?? user?.emailAddresses[0]?.emailAddress}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={signOut}
-                  className="text-xs sm:text-sm"
-                >
-                  Sign Out
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="relative h-8 w-8 rounded-full"
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback>{userInitials}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        {user?.firstName || "User"}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user?.emailAddresses[0]?.emailAddress}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={signOut} className="text-red-600">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -69,8 +115,8 @@ export default function Navbar({
 
   if (isBoardPage) {
     return (
-      <header className="bg-white border-b sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 sm:py-4">
+      <header className="bg-white/30 backdrop-blur-xl border-b border-white/20 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
               <Link
@@ -78,13 +124,12 @@ export default function Navbar({
                 className="flex items-center space-x-1 sm:space-x-2 text-gray-600 hover:text-gray-900 flex-shrink-0"
               >
                 <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">Back to dashboard</span>
-                <span className="sm:hidden">Back</span>
+                <span className="hidden sm:inline">Back</span>
               </Link>
-              <div className="h-4 sm:h-6 w-px bg-gray-300 hidden sm:block" />
-              <div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
+              <div className="h-6 w-px bg-gray-300 hidden sm:block" />
+              <div className="flex items-center space-x-2 min-w-0">
                 <Trello className="text-blue-600" />
-                <div className="items-center space-x-1 sm:space-x-2 min-w-0">
+                <div className="flex items-center space-x-2 min-w-0">
                   <span className="text-lg font-bold text-gray-900 truncate">
                     {boardTitle}
                   </span>
@@ -92,7 +137,7 @@ export default function Navbar({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 w-7 flex-shrink-0 p-0"
+                      className="h-7 w-7 p-0"
                       onClick={onEditBoard}
                     >
                       <MoreHorizontal />
@@ -102,28 +147,9 @@ export default function Navbar({
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
-              {onFilterClick && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={`text-xs sm:text-sm ${
-                    filterCount > 0 ? "bg-blue-100 border-blue-200" : ""
-                  }`}
-                  onClick={onFilterClick}
-                >
-                  <Filter className="h-3 w-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                  <span className="hidden sm:inline">Filter</span>
-                  {filterCount > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="text-xs ml-1 sm:ml-2 bg-blue-100 border-blue-200"
-                    >
-                      {filterCount}
-                    </Badge>
-                  )}
-                </Button>
-              )}
+            <div className="flex items-center space-x-2">
+              {children}
+              <ModeToggle />
             </div>
           </div>
         </div>
@@ -132,45 +158,14 @@ export default function Navbar({
   }
 
   return (
-    <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
+    <header className="border-b border-white/20 bg-white/30 backdrop-blur-xl sticky top-0 z-50 shadow-sm transition-all">
+      <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Trello className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-          <span className="text-xl sm:text-2xl font-bold text-gray-900">
-            TrelloClone
-          </span>
+          <span className="text-xl font-bold text-gray-900">Task Tracker</span>
         </div>
-
-        <div className="flex items-center space-x-2 sm:space-x-4">
-          {isSignedIn ? (
-            <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0 sm:space-x-4">
-              <span className="text-xs sm:text-sm text-gray-600 hidden sm:block">
-                Welcome, {user?.firstName ?? user?.emailAddresses[0]?.emailAddress}
-              </span>
-              <Link href="/tasks">
-                <Button size="sm" className="text-xs sm:text-sm">
-                  Go to Dashboard <ArrowRight />
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <div>
-              <Link href="/login">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs sm:text-sm"
-                >
-                  Sign In
-                </Button>
-              </Link>
-              <Link href="/signup">
-                <Button size="sm" className="text-xs sm:text-sm">
-                  Sign Up
-                </Button>
-              </Link>
-            </div>
-          )}
+        <div className="flex items-center space-x-4">
+           <ModeToggle />
         </div>
       </div>
     </header>

@@ -61,10 +61,12 @@ export interface Task {
   _id: string;
   title: string;
   description: string;
-  status: 'pending' | 'completed';
+  status: 'todo' | 'in-progress' | 'in-review' | 'completed';
+  color?: string | null;
   dueDate: string | null;
   owner: string;
   createdAt: string;
+  position?: number;
 }
 
 export interface AuthResponse {

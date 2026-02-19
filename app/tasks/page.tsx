@@ -1,764 +1,972 @@
 "use client";
 
-import Navbar from "@/components/navbar";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { api, getToken, type Task } from "@/lib/api";
+import { useUser } from "@/lib/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
-  DialogHeader,
   DialogContent,
+  DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useUser } from "@/lib/contexts/AuthContext";
-import { api, getToken, type Task } from "@/lib/api";
 import {
+  MoreHorizontal,
+  Plus,
+  Flag,
+  Loader2,
+  Pencil,
+  Trash2,
+  X,
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   Circle,
   Clock,
-  Filter,
-  Grid3x3,
+  LayoutGrid,
   List,
-  Loader2,
-  Pencil,
-  Plus,
-  Rocket,
-  Search,
-  Trash2,
-  Trello,
+  Table2,
+  CalendarDays,
+  ArrowUpDown,
+  AlertCircle,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useCallback } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
-export default function TasksPage() {
-  const { isSignedIn, user } = useUser();
-  const router = useRouter();
-  const token = getToken();
+// DnD Kit
+import {
+  DndContext,
+  DragOverlay,
+  useSensors,
+  useSensor,
+  PointerSensor,
+  KeyboardSensor,
+  closestCorners,
+  DragStartEvent,
+  DragOverEvent,
+  DragEndEvent,
+  defaultDropAnimationSideEffects,
+  DropAnimation,
+  useDroppable,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-  // Create form state
-  const [newTitle, setNewTitle] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newDueDate, setNewDueDate] = useState("");
+const VIEW_MODES = [
+  { id: "Board", icon: LayoutGrid },
+  { id: "List",  icon: List },
+  { id: "Table", icon: Table2 },
+  { id: "Timeline", icon: CalendarDays },
+];
 
-  // Edit form state
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editDueDate, setEditDueDate] = useState("");
+const COLUMNS = [
+  { id: "todo",        label: "To Do",       color: "bg-blue-500",    textColor: "text-blue-600",   ring: "ring-blue-200"    },
+  { id: "in-progress", label: "In Progress", color: "bg-amber-400",   textColor: "text-amber-600",  ring: "ring-amber-200"   },
+  { id: "in-review",   label: "In Review",   color: "bg-violet-500",  textColor: "text-violet-600", ring: "ring-violet-200"  },
+  { id: "completed",   label: "Completed",   color: "bg-emerald-500", textColor: "text-emerald-600",ring: "ring-emerald-200" },
+];
 
-  const [filters, setFilters] = useState({
-    search: "",
-    status: "all" as "all" | "pending" | "completed",
-    dateRange: {
-      start: null as string | null,
-      end: null as string | null,
-    },
-  });
+const STATUS_META: Record<string, { label: string; color: string; dot: string; border: string }> = {
+  "todo":        { label: "To Do",        color: "text-blue-600 bg-blue-50",      dot: "bg-blue-500",    border: "border-blue-100"   },
+  "in-progress": { label: "In Progress",  color: "text-amber-600 bg-amber-50",    dot: "bg-amber-400",   border: "border-amber-100"  },
+  "in-review":   { label: "In Review",    color: "text-violet-600 bg-violet-50",  dot: "bg-violet-500",  border: "border-violet-100" },
+  "completed":   { label: "Completed",    color: "text-emerald-600 bg-emerald-50",dot: "bg-emerald-500", border: "border-emerald-100" },
+};
 
-  const fetchTasks = useCallback(async () => {
-    if (!token) return;
-    try {
-      const data = await api<Task[]>("/api/tasks", { token });
-      setTasks(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch tasks");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+const AVATARS = ["https://i.pravatar.cc/150?u=1", "https://i.pravatar.cc/150?u=2"];
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+/** Dynamic icon based on status + deadline proximity */
+function TaskStatusIcon({ status, dueDate }: { status: string; dueDate?: string | null }) {
+  if (status === "completed") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+  if (status === "todo") return <Circle className="h-3.5 w-3.5 text-gray-400" />;
+  // in-progress or in-review → Clock
+  const isUrgent = dueDate && (new Date(dueDate).getTime() - Date.now()) <= 24 * 60 * 60 * 1000 && new Date(dueDate).getTime() >= Date.now();
+  return <Clock className={cn("h-3.5 w-3.5", isUrgent ? "text-amber-500" : "text-gray-400")} />;
+}
+
+/** Red pill shown next to due dates on overdue tasks */
+function OverduePill({ dueDate, status }: { dueDate: string | null; status: string }) {
+  if (!dueDate || status === "completed") return null;
+  if (new Date(dueDate) >= new Date()) return null;
+  return <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full leading-none whitespace-nowrap">OVERDUE</span>;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const m = STATUS_META[status] ?? STATUS_META["todo"];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap", m.color)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", m.dot)} />
+      {m.label}
+    </span>
+  );
+}
+
+function DueDateChip({ dueDate, status }: { dueDate: string | null; status: string }) {
+  if (!dueDate) return null;
+  const overdue = new Date(dueDate) < new Date() && status !== "completed";
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={cn("flex items-center gap-1 text-xs font-medium", overdue ? "text-red-500" : "text-gray-400")}>
+        <Flag className="h-3 w-3" />
+        {new Date(dueDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+      </span>
+      <OverduePill dueDate={dueDate} status={status} />
+    </span>
+  );
+}
+
+// ─── Edit Task Dialog ─────────────────────────────────────────────────────────
+
+interface EditTaskDialogProps {
+  task: Task;
+  open: boolean;
+  onClose: () => void;
+  onSave: (updated: Partial<Task>) => Promise<void>;
+  onDelete: () => Promise<void>;
+}
+
+function EditTaskDialog({ task, open, onClose, onSave, onDelete }: EditTaskDialogProps) {
+  const [title, setTitle]     = useState(task.title);
+  const [desc, setDesc]       = useState(task.description ?? "");
+  const [status, setStatus]   = useState(task.status);
+  const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.split("T")[0] : "");
+  const [saving, setSaving]   = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    fetchTasks();
-  }, [token, router, fetchTasks]);
+    setTitle(task.title); setDesc(task.description ?? ""); setStatus(task.status);
+    setDueDate(task.dueDate ? task.dueDate.split("T")[0] : ""); setConfirming(false);
+  }, [task]);
 
-  // Filter tasks
-  const filteredTasks = tasks.filter((task) => {
-    const matchesSearch =
-      task.title.toLowerCase().includes(filters.search.toLowerCase()) ||
-      task.description.toLowerCase().includes(filters.search.toLowerCase());
+  const colDef = COLUMNS.find(c => c.id === status);
 
-    const matchesStatus =
-      filters.status === "all" || task.status === filters.status;
-
-    const matchesDateRange =
-      (!filters.dateRange.start ||
-        new Date(task.createdAt) >= new Date(filters.dateRange.start)) &&
-      (!filters.dateRange.end ||
-        new Date(task.createdAt) <= new Date(filters.dateRange.end));
-
-    return matchesSearch && matchesStatus && matchesDateRange;
-  });
-
-  const pendingTasks = tasks.filter((t) => t.status === "pending");
-  const completedTasks = tasks.filter((t) => t.status === "completed");
-
-  // Create task
-  const handleCreate = async () => {
-    if (!token || !newTitle.trim()) return;
-
-    const tempTask: Task = {
-      _id: `temp-${Date.now()}`,
-      title: newTitle,
-      description: newDescription,
-      status: "pending",
-      dueDate: newDueDate || null,
-      owner: "",
-      createdAt: new Date().toISOString(),
-    };
-
-    setTasks((prev) => [tempTask, ...prev]);
-    setShowCreateDialog(false);
-    setNewTitle("");
-    setNewDescription("");
-    setNewDueDate("");
-
-    try {
-      const created = await api<Task>("/api/tasks", {
-        method: "POST",
-        token,
-        body: {
-          title: tempTask.title,
-          description: tempTask.description,
-          dueDate: tempTask.dueDate,
-        },
-      });
-      setTasks((prev) =>
-        prev.map((t) => (t._id === tempTask._id ? created : t))
-      );
-    } catch {
-      setTasks((prev) => prev.filter((t) => t._id !== tempTask._id));
-    }
+  const handleSave = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    await onSave({ title: title.trim(), description: desc, status, dueDate: dueDate || null });
+    setSaving(false); onClose();
   };
-
-  // Toggle status
-  const handleToggleStatus = async (task: Task) => {
-    if (!token) return;
-    const newStatus = task.status === "pending" ? "completed" : "pending";
-
-    setTasks((prev) =>
-      prev.map((t) => (t._id === task._id ? { ...t, status: newStatus } : t))
-    );
-
-    try {
-      await api(`/api/tasks/${task._id}`, {
-        method: "PUT",
-        token,
-        body: { status: newStatus },
-      });
-    } catch {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t._id === task._id ? { ...t, status: task.status } : t
-        )
-      );
-    }
+  const handleDelete = async () => {
+    setSaving(true); await onDelete(); setSaving(false); onClose();
   };
-
-  // Delete task
-  const handleDelete = async (taskId: string) => {
-    if (!token) return;
-    const original = tasks.find((t) => t._id === taskId);
-    setTasks((prev) => prev.filter((t) => t._id !== taskId));
-
-    try {
-      await api(`/api/tasks/${taskId}`, { method: "DELETE", token });
-    } catch {
-      if (original) setTasks((prev) => [...prev, original]);
-    }
-  };
-
-  // Start editing
-  const startEdit = (task: Task) => {
-    setEditingTask(task);
-    setEditTitle(task.title);
-    setEditDescription(task.description);
-    setEditDueDate(task.dueDate ? task.dueDate.split("T")[0] : "");
-  };
-
-  // Submit edit
-  const handleEdit = async () => {
-    if (!token || !editingTask) return;
-
-    const updates = {
-      title: editTitle,
-      description: editDescription,
-      dueDate: editDueDate || null,
-    };
-
-    setTasks((prev) =>
-      prev.map((t) => (t._id === editingTask._id ? { ...t, ...updates } : t))
-    );
-    setEditingTask(null);
-
-    try {
-      const updated = await api<Task>(`/api/tasks/${editingTask._id}`, {
-        method: "PUT",
-        token,
-        body: updates,
-      });
-      setTasks((prev) =>
-        prev.map((t) => (t._id === updated._id ? updated : t))
-      );
-    } catch {
-      setTasks((prev) =>
-        prev.map((t) => (t._id === editingTask._id ? editingTask : t))
-      );
-    }
-  };
-
-  function clearFilters() {
-    setFilters({
-      search: "",
-      status: "all",
-      dateRange: { start: null, end: null },
-    });
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-red-600">Error loading tasks</h2>
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
-      <main className="container mx-auto px-4 py-6 sm:py-8">
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-            Welcome back,{" "}
-            {user?.firstName ?? user?.emailAddresses[0]?.emailAddress}! 👋
-          </h1>
-          <p className="text-gray-600">
-            Here&apos;s what&apos;s happening with your tasks today.
-          </p>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Total Tasks
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                    {tasks.length}
-                  </p>
-                </div>
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Trello className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Pending
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-amber-600">
-                    {pendingTasks.length}
-                  </p>
-                </div>
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Completed
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-green-600">
-                    {completedTasks.length}
-                  </p>
-                </div>
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Rocket className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Due Soon
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-purple-600">
-                    {
-                      tasks.filter((t) => {
-                        if (!t.dueDate || t.status === "completed") return false;
-                        const due = new Date(t.dueDate);
-                        const threeDays = new Date();
-                        threeDays.setDate(threeDays.getDate() + 3);
-                        return due <= threeDays;
-                      }).length
-                    }
-                  </p>
-                </div>
-                <div className="h-10 w-10 sm:h-12 sm:w-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  📊
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Tasks */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 space-y-4 sm:space-y-0">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-                Your Tasks
-              </h2>
-              <p className="text-gray-600">Manage your tasks and track progress</p>
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-lg p-0 overflow-hidden rounded-2xl border border-gray-100 shadow-2xl" showCloseButton={false}>
+        <div className={cn("h-1.5 w-full", colDef?.color ?? "bg-blue-500")} />
+        <DialogHeader className="sr-only"><DialogTitle>Edit Task</DialogTitle></DialogHeader>
+        <div className="px-6 pt-5 pb-6 space-y-5">
+          <div className="flex items-start justify-between gap-3">
+            <StatusBadge status={status} />
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Title</Label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} className="text-base font-semibold rounded-xl" autoFocus onKeyDown={e => e.key === "Enter" && handleSave()} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Description</Label>
+            <Textarea value={desc} onChange={e => setDesc(e.target.value)} className="resize-none rounded-xl min-h-[80px] text-sm" placeholder="Add more details…" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</Label>
+              <Select value={status} onValueChange={v => setStatus(v as Task["status"])}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>{COLUMNS.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-              <div className="flex items-center space-x-2 rounded bg-white border p-1">
-                <Button
-                  variant={viewMode === "grid" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("grid")}
-                >
-                  <Grid3x3 />
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("list")}
-                >
-                  <List />
-                </Button>
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsFilterOpen(true)}
-              >
-                <Filter />
-                Filter
-              </Button>
-
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus />
-                Create Task
-              </Button>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Due Date</Label>
+              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="rounded-xl" />
             </div>
           </div>
-
-          {/* Search Bar */}
-          <div className="relative mb-4 sm:mb-6">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              id="search"
-              placeholder="Search tasks..."
-              className="pl-10"
-              value={filters.search}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, search: e.target.value }))
-              }
-            />
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+            {confirming ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-red-600 font-medium">Delete this task?</span>
+                <Button size="sm" variant="destructive" onClick={handleDelete} disabled={saving} className="rounded-lg">Yes, Delete</Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} className="rounded-lg">Cancel</Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg gap-1.5">
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+            )}
+            <Button onClick={handleSave} disabled={!title.trim() || saving} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
+            </Button>
           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-          {/* Loading state */}
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-              <span className="ml-3 text-gray-600">Loading your tasks...</span>
-            </div>
-          ) : tasks.length === 0 ? (
-            <Card className="border-2 border-dashed border-gray-300">
-              <CardContent className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
-                <Plus className="h-10 w-10 text-gray-400 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  No tasks yet
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  Create your first task to get started
-                </p>
-                <Button onClick={() => setShowCreateDialog(true)}>
-                  <Plus className="mr-2" />
-                  Create Task
-                </Button>
-              </CardContent>
-            </Card>
-          ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-              {filteredTasks.map((task) => (
-                <Card
-                  key={task._id}
-                  className="hover:shadow-lg transition-shadow cursor-pointer group"
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={() => handleToggleStatus(task)}
-                        className="flex items-center"
-                      >
-                        {task.status === "completed" ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <Circle className="h-5 w-5 text-gray-400 hover:text-blue-500 transition-colors" />
-                        )}
-                      </button>
-                      <Badge
-                        className="text-xs"
-                        variant={
-                          task.status === "completed" ? "default" : "secondary"
-                        }
-                      >
-                        {task.status}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 sm:p-6">
-                    <CardTitle
-                      className={`text-base sm:text-lg mb-2 group-hover:text-blue-600 transition-colors ${
-                        task.status === "completed"
-                          ? "line-through text-gray-400"
-                          : ""
-                      }`}
-                    >
-                      {task.title}
-                    </CardTitle>
-                    <CardDescription className="text-sm mb-4 line-clamp-2">
-                      {task.description || "No description"}
-                    </CardDescription>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-gray-500 space-y-1 sm:space-y-0">
-                      <span>
-                        Created {new Date(task.createdAt).toLocaleDateString()}
-                      </span>
-                      {task.dueDate && (
-                        <span className="text-amber-600">
-                          📅 Due{" "}
-                          {new Date(task.dueDate).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => startEdit(task)}
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-700"
-                        onClick={() => handleDelete(task._id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+// ─── Create Task Dialog ───────────────────────────────────────────────────────
 
-              <Card
-                className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors cursor-pointer group"
-                onClick={() => setShowCreateDialog(true)}
-              >
-                <CardContent className="p-4 sm:p-6 flex flex-col items-center justify-center h-full min-h-[200px]">
-                  <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 group-hover:text-blue-600 mb-2" />
-                  <p className="text-sm sm:text-base text-gray-600 group-hover:text-blue-600 font-medium">
-                    Create new task
-                  </p>
-                </CardContent>
-              </Card>
+interface CreateTaskDialogProps {
+  open: boolean;
+  onClose: () => void;
+  initialStatus: string;
+  onCreate: (data: { title: string; description: string; status: string; dueDate?: string }) => Promise<void>;
+}
+
+function CreateTaskDialog({ open, onClose, initialStatus, onCreate }: CreateTaskDialogProps) {
+  const [title, setTitle]   = useState("");
+  const [desc, setDesc]     = useState("");
+  const [status, setStatus] = useState(initialStatus);
+  const [dueDate, setDueDate] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => setStatus(initialStatus), [initialStatus]);
+  useEffect(() => { if (!open) { setTitle(""); setDesc(""); setDueDate(""); setSaving(false); } }, [open]);
+
+  const handleCreate = async () => {
+    if (!title.trim()) return;
+    setSaving(true); await onCreate({ title: title.trim(), description: desc, status, dueDate: dueDate || undefined }); setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl border border-gray-100 shadow-2xl" showCloseButton={false}>
+        <div className={cn("h-1.5 w-full", COLUMNS.find(c => c.id === status)?.color ?? "bg-blue-500")} />
+        <div className="px-6 pt-5 pb-6 space-y-4">
+          <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">New Task</DialogTitle></DialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Title</Label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="What needs to be done?" className="rounded-xl" autoFocus onKeyDown={e => e.key === "Enter" && handleCreate()} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Description <span className="text-gray-300 normal-case font-normal">(optional)</span></Label>
+            <Textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Add more detail…" className="resize-none rounded-xl min-h-[72px] text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Column</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>{COLUMNS.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredTasks.map((task) => (
-                <Card
-                  key={task._id}
-                  className="hover:shadow-lg transition-shadow cursor-pointer group"
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Due Date <span className="text-gray-300 normal-case font-normal">(opt.)</span></Label>
+              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="rounded-xl" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
+            <Button variant="ghost" onClick={onClose} className="rounded-xl text-gray-500">Cancel</Button>
+            <Button onClick={handleCreate} disabled={!title.trim() || saving} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create task"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Board view components ────────────────────────────────────────────────────
+
+function TaskCard({ task, onEdit }: { task: Task; onEdit?: () => void }) {
+  const meta = STATUS_META[task.status] ?? STATUS_META["todo"];
+  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+  return (
+    <div className="group/card bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-100 hover:ring-1 hover:ring-blue-100 transition-all duration-150 cursor-grab active:cursor-grabbing space-y-3">
+      <div className="flex items-center justify-between">
+        <StatusBadge status={task.status} />
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onEdit?.(); }}
+          className="opacity-0 group-hover/card:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </div>
+      <div>
+        <h3 className="text-gray-900 font-semibold text-sm leading-snug mb-1 line-clamp-2">{task.title}</h3>
+        {task.description && <p className="text-gray-400 text-xs line-clamp-2 leading-relaxed">{task.description}</p>}
+      </div>
+      <div className="flex items-center justify-between">
+        <DueDateChip dueDate={task.dueDate} status={task.status} />
+        <div className="flex -space-x-2">
+          {AVATARS.map((src, i) => (
+            <Avatar key={i} className="h-6 w-6 border-2 border-white">
+              <AvatarImage src={src} /><AvatarFallback className="text-[9px]">U{i}</AvatarFallback>
+            </Avatar>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SortableTask({ task, onEdit }: { task: Task; onEdit: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task._id, data: { task } });
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }} {...attributes} {...listeners}>
+      <TaskCard task={task} onEdit={onEdit} />
+    </div>
+  );
+}
+
+function TaskColumn({ col, tasks, onAddTask, onEditTask }: { col: typeof COLUMNS[0]; tasks: Task[]; onAddTask: (s: string) => void; onEditTask: (t: Task) => void }) {
+  const { setNodeRef } = useDroppable({ id: col.id, data: { type: "Column" } });
+  return (
+    <div className="flex flex-col gap-3 h-full">
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <span className={cn("h-2.5 w-2.5 rounded-full", col.color)} />
+          <h3 className="font-semibold text-gray-700 text-sm">{col.label}</h3>
+          <span className="text-xs font-bold text-gray-400 bg-gray-100 rounded-full h-5 min-w-[20px] flex items-center justify-center px-1.5">{tasks.length}</span>
+        </div>
+        <button onClick={() => onAddTask(col.id)} className="h-7 w-7 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all">
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div ref={setNodeRef} className="flex-1 flex flex-col gap-3 min-h-[140px] p-2 rounded-2xl border-2 border-dashed border-transparent bg-gray-50/40 hover:border-gray-200 hover:bg-gray-50 transition-all">
+        <SortableContext id={col.id} items={tasks.map(t => t._id)} strategy={verticalListSortingStrategy}>
+          {tasks.map(task => <SortableTask key={task._id} task={task} onEdit={() => onEditTask(task)} />)}
+        </SortableContext>
+        {tasks.length === 0 && <div className="flex-1 flex items-center justify-center text-gray-300 text-xs font-medium select-none">Drop here</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── List View ────────────────────────────────────────────────────────────────
+
+function ListView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const toggle = (id: string) => setCollapsed(p => ({ ...p, [id]: !p[id] }));
+
+  return (
+    <div className="space-y-3">
+      {COLUMNS.map(col => {
+        const colTasks = tasks.filter(t => t.status === col.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        const isCollapsed = collapsed[col.id];
+        return (
+          <div key={col.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Group header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+              onClick={() => toggle(col.id)}
+            >
+              <div className="flex items-center gap-3">
+                <span className={cn("h-3 w-3 rounded-full", col.color)} />
+                <span className="font-semibold text-gray-800 text-sm">{col.label}</span>
+                <span className="text-xs font-bold text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{colTasks.length}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); onAddTask(col.id); }}
+                  className="h-7 w-7 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all"
                 >
-                  <CardContent className="p-4 sm:p-6">
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => handleToggleStatus(task)}>
-                        {task.status === "completed" ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <Circle className="h-5 w-5 text-gray-400 hover:text-blue-500 transition-colors" />
-                        )}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3">
-                          <h3
-                            className={`font-semibold truncate ${
-                              task.status === "completed"
-                                ? "line-through text-gray-400"
-                                : "text-gray-900"
-                            }`}
-                          >
-                            {task.title}
-                          </h3>
-                          <Badge
-                            className="text-xs flex-shrink-0"
-                            variant={
-                              task.status === "completed"
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {task.status}
-                          </Badge>
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+                {isCollapsed ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+              </div>
+            </div>
+
+            {/* Task rows */}
+            {!isCollapsed && (
+              <div className="divide-y divide-gray-50">
+                {colTasks.length === 0 ? (
+                  <div className="px-5 py-4 text-sm text-gray-400 italic">No tasks here yet.</div>
+                ) : (
+                  colTasks.map(task => {
+                    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+                    return (
+                      <div
+                        key={task._id}
+                        className="group flex items-center gap-4 px-5 py-3.5 hover:bg-blue-50/40 transition-colors cursor-pointer"
+                        onClick={() => onEditTask(task)}
+                      >
+                        {/* Status icon */}
+                        <div className="shrink-0"><TaskStatusIcon status={task.status} dueDate={task.dueDate} /></div>
+
+                        {/* Title + desc */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-800 text-sm truncate">{task.title}</p>
+                          {task.description && <p className="text-xs text-gray-400 truncate">{task.description}</p>}
                         </div>
-                        <p className="text-sm text-gray-500 truncate mt-1">
-                          {task.description || "No description"}
-                        </p>
+
+                        {/* Due date */}
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          {task.dueDate ? (
+                            <span className={cn("text-xs font-medium", isOverdue ? "text-red-500" : "text-gray-400")}>
+                              {new Date(task.dueDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                            </span>
+                          ) : <span className="text-xs text-gray-300">—</span>}
+                          <OverduePill dueDate={task.dueDate} status={task.status} />
+                        </div>
+
+                        {/* Avatars */}
+                        <div className="shrink-0 flex -space-x-1.5">
+                          {AVATARS.map((src, i) => (
+                            <Avatar key={i} className="h-6 w-6 border-2 border-white">
+                              <AvatarImage src={src} /><AvatarFallback className="text-[9px]">U</AvatarFallback>
+                            </Avatar>
+                          ))}
+                        </div>
+
+                        <MoreHorizontal className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 flex-shrink-0">
-                        {task.dueDate && (
-                          <span className="text-amber-600">
-                            📅 {new Date(task.dueDate).toLocaleDateString()}
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Table View ───────────────────────────────────────────────────────────────
+
+type SortKey = "title" | "status" | "dueDate" | "createdAt";
+
+function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
+  const [sortKey, setSortKey]   = useState<SortKey>("status");
+  const [sortDir, setSortDir]   = useState<"asc" | "desc">("asc");
+
+  const sorted = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+      let av: string = a[sortKey] ?? "";
+      let bv: string = b[sortKey] ?? "";
+      if (sortKey === "status") {
+        const order = ["todo", "in-progress", "in-review", "completed"];
+        av = String(order.indexOf(a.status));
+        bv = String(order.indexOf(b.status));
+      }
+      return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+  }, [tasks, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  const SortHeader = ({ label, col }: { label: string; col: SortKey }) => (
+    <th
+      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 select-none whitespace-nowrap"
+      onClick={() => handleSort(col)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        <ArrowUpDown className={cn("h-3 w-3", sortKey === col ? "text-blue-500" : "text-gray-300")} />
+      </div>
+    </th>
+  );
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Action bar */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+        <span className="text-sm font-semibold text-gray-700">{tasks.length} task{tasks.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px]">
+          <thead className="bg-gray-50/70 border-b border-gray-100">
+            <tr>
+              <SortHeader label="Title"    col="title" />
+              <SortHeader label="Status"   col="status" />
+              <SortHeader label="Due Date" col="dueDate" />
+              <SortHeader label="Created"  col="createdAt" />
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {sorted.length === 0 ? (
+              <tr><td colSpan={5} className="px-5 py-12 text-center text-gray-400 text-sm">No tasks yet. Create one to get started.</td></tr>
+            ) : (
+              sorted.map(task => {
+                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
+                return (
+                  <tr
+                    key={task._id}
+                    className="group hover:bg-blue-50/30 transition-colors cursor-pointer"
+                    onClick={() => onEditTask(task)}
+                  >
+                    {/* Title */}
+                    <td className="px-4 py-3.5 max-w-[280px]">
+                      <div className="flex items-center gap-2">
+                        <div className="shrink-0"><TaskStatusIcon status={task.status} dueDate={task.dueDate} /></div>
+                        <div className="min-w-0">
+                          <p className={cn("font-medium text-sm text-gray-800 truncate", task.status === "completed" && "line-through text-gray-400")}>{task.title}</p>
+                          {task.description && <p className="text-xs text-gray-400 truncate">{task.description}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    {/* Status */}
+                    <td className="px-4 py-3.5">
+                      <StatusBadge status={task.status} />
+                    </td>
+                    {/* Due date */}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-1.5">
+                        {task.dueDate ? (
+                          <span className={cn("text-sm font-medium flex items-center gap-1", isOverdue ? "text-red-500" : "text-gray-600")}>
+                            {isOverdue && <AlertCircle className="h-3.5 w-3.5" />}
+                            {new Date(task.dueDate).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
                           </span>
-                        )}
-                        <span>
-                          {new Date(task.createdAt).toLocaleDateString()}
-                        </span>
+                        ) : <span className="text-gray-300 text-sm">—</span>}
+                        <OverduePill dueDate={task.dueDate} status={task.status} />
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => startEdit(task)}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-700"
-                          onClick={() => handleDelete(task._id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </td>
+                    {/* Created */}
+                    <td className="px-4 py-3.5 text-sm text-gray-400 whitespace-nowrap">
+                      {new Date(task.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                    </td>
+                    {/* Actions */}
+                    <td className="px-4 py-3.5 text-right">
+                      <MoreHorizontal className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Timeline View ────────────────────────────────────────────────────────────
+
+function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Figure out date range: earliest dueDate to latest dueDate, with a minimum window of 30 days
+  const datedTasks = tasks.filter(t => t.dueDate);
+  const undatedTasks = tasks.filter(t => !t.dueDate);
+
+  const getRange = () => {
+    if (datedTasks.length === 0) {
+      const start = new Date(today); start.setDate(start.getDate() - 2);
+      const end   = new Date(today); end.setDate(end.getDate() + 28);
+      return { start, end };
+    }
+    const dates = datedTasks.map(t => new Date(t.dueDate!));
+    let minD = new Date(Math.min(...dates.map(d => d.getTime())));
+    let maxD = new Date(Math.max(...dates.map(d => d.getTime())));
+    minD.setDate(minD.getDate() - 4);
+    if (maxD.getTime() - minD.getTime() < 29 * 86400000) maxD = new Date(minD.getTime() + 30 * 86400000);
+    return { start: minD, end: maxD };
+  };
+
+  const { start, end } = getRange();
+  const totalDays = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+
+  // Build day labels
+  const days: Date[] = Array.from({ length: totalDays }, (_, i) => {
+    const d = new Date(start); d.setDate(d.getDate() + i); return d;
+  });
+
+  const dayPct = (date: Date) => {
+    const diff = date.getTime() - start.getTime();
+    return (diff / (end.getTime() - start.getTime())) * 100;
+  };
+
+  const todayPct = dayPct(today);
+
+  const COL_COLORS: Record<string, string> = {
+    "todo": "bg-blue-500", "in-progress": "bg-amber-400", "in-review": "bg-violet-500", "completed": "bg-emerald-500"
+  };
+  const COL_TEXT: Record<string, string> = {
+    "todo": "text-blue-700", "in-progress": "text-amber-700", "in-review": "text-violet-700", "completed": "text-emerald-700"
+  };
+  const COL_BG: Record<string, string> = {
+    "todo": "bg-blue-50", "in-progress": "bg-amber-50", "in-review": "bg-violet-50", "completed": "bg-emerald-50"
+  };
+
+  // Month labels
+  const monthLabels: { label: string; pct: number }[] = [];
+  let lastMonth = -1;
+  days.forEach(d => {
+    if (d.getMonth() !== lastMonth) {
+      lastMonth = d.getMonth();
+      monthLabels.push({ label: d.toLocaleDateString(undefined, { month: "long", year: "numeric" }), pct: dayPct(d) });
+    }
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-3">
+        {COLUMNS.map(col => (
+          <span key={col.id} className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+            <span className={cn("h-2.5 w-2.5 rounded-full", col.color)} />{col.label}
+          </span>
+        ))}
+        <div className="ml-auto" />
+      </div>
+
+      {/* Timeline chart */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <div className="min-w-[700px]">
+            {/* Month header */}
+            <div className="relative h-8 border-b border-gray-100 bg-gray-50/60">
+              {monthLabels.map((m, i) => (
+                <div key={i} className="absolute top-0 h-full flex items-center" style={{ left: `calc(200px + ${m.pct}% * (100% - 200px) / 100)` }}>
+                  <span className="text-xs font-semibold text-gray-500 px-2 whitespace-nowrap">{m.label}</span>
+                </div>
               ))}
             </div>
+
+            {/* Day header (abbreviated) */}
+            <div className="relative h-7 border-b border-gray-100 bg-gray-50/40 flex">
+              <div className="w-[200px] shrink-0" />
+              <div className="flex-1 relative">
+                {days.filter((_, i) => i % Math.max(1, Math.floor(totalDays / 20)) === 0).map((d, i) => (
+                  <div key={i} className="absolute top-0 h-full flex items-center" style={{ left: `${dayPct(d)}%` }}>
+                    <span className={cn("text-[10px] font-medium px-1", d.toDateString() === today.toDateString() ? "text-blue-600" : "text-gray-400")}>
+                      {d.toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                    </span>
+                  </div>
+                ))}
+                {/* Today line */}
+                {todayPct >= 0 && todayPct <= 100 && (
+                  <div className="absolute top-0 h-full w-px bg-blue-400 opacity-60" style={{ left: `${todayPct}%` }} />
+                )}
+              </div>
+            </div>
+
+            {/* Task rows */}
+            <div className="divide-y divide-gray-50">
+              {datedTasks.sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime()).map(task => {
+                const duePct = dayPct(new Date(task.dueDate!));
+                const isOverdue = new Date(task.dueDate!) < today && task.status !== "completed";
+                return (
+                  <div key={task._id} className="group flex items-center hover:bg-blue-50/30 transition-colors" style={{ minHeight: "48px" }}>
+                    {/* Task label */}
+                    <div
+                      className="w-[200px] shrink-0 px-4 flex items-center gap-2 min-w-0 cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() => onEditTask(task)}
+                    >
+                      <div className="shrink-0"><TaskStatusIcon status={task.status} dueDate={task.dueDate} /></div>
+                      <span className={cn("text-sm font-medium text-gray-700 truncate", task.status === "completed" && "line-through text-gray-400")}>
+                        {task.title}
+                      </span>
+                    </div>
+                    {/* Bar area */}
+                    <div className="flex-1 relative h-full flex items-center py-2.5">
+                      {/* Today line */}
+                      {todayPct >= 0 && todayPct <= 100 && (
+                        <div className="absolute top-0 bottom-0 w-px bg-blue-400 opacity-40 pointer-events-none" style={{ left: `${todayPct}%` }} />
+                      )}
+                      {/* Milestone dot */}
+                      <div
+                        className="absolute cursor-pointer"
+                        style={{ left: `calc(${Math.max(0, Math.min(100, duePct))}% - 8px)` }}
+                        onClick={() => onEditTask(task)}
+                        title={task.title}
+                      >
+                        <div className={cn(
+                          "h-4 w-4 rounded-full border-2 border-white shadow-sm transition-transform hover:scale-125",
+                          isOverdue ? "bg-red-400" : (COL_COLORS[task.status] ?? "bg-gray-400")
+                        )} />
+                      </div>
+                      {/* Label to the right of dot */}
+                      <span
+                        className={cn("absolute text-xs font-medium whitespace-nowrap flex items-center gap-1.5", COL_TEXT[task.status] ?? "text-gray-600")}
+                        style={{ left: `calc(${Math.max(0, Math.min(95, duePct))}% + 14px)` }}
+                      >
+                        {new Date(task.dueDate!).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                        <OverduePill dueDate={task.dueDate} status={task.status} />
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {datedTasks.length === 0 && (
+                <div className="flex items-center" style={{ minHeight: "80px" }}>
+                  <div className="w-[200px] shrink-0 px-4 text-sm text-gray-400 italic">No due dates set</div>
+                  <div className="flex-1 relative h-full flex items-center justify-center py-4">
+                    <p className="text-sm text-gray-400">Add due dates to tasks to see them on the timeline.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Undated tasks list */}
+      {undatedTasks.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/60">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tasks without due dates ({undatedTasks.length})</span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {undatedTasks.map(task => (
+              <div key={task._id} className="group flex items-center gap-3 px-5 py-3 hover:bg-blue-50/30 transition-colors cursor-pointer" onClick={() => onEditTask(task)}>
+                <div className="shrink-0"><TaskStatusIcon status={task.status} dueDate={task.dueDate} /></div>
+                <span className="text-sm font-medium text-gray-700 flex-1 truncate">{task.title}</span>
+                <StatusBadge status={task.status} />
+                <MoreHorizontal className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+interface TasksPageProps { workspaceId?: string; }
+
+export default function TasksPage({ workspaceId }: TasksPageProps) {
+  const { user } = useUser();
+  const token  = getToken();
+  const router = useRouter();
+
+  const [tasks, setTasks]   = useState<Task[]>([]);
+  const [viewMode, setViewMode] = useState("Board");
+  const [loading, setLoading]   = useState(true);
+
+  // DnD
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  // Dialogs
+  const [showCreate, setShowCreate]         = useState(false);
+  const [newTaskStatus, setNewTaskStatus]   = useState("todo");
+  const [editingTask, setEditingTask]       = useState<Task | null>(null);
+
+  // Workspace header
+  const [workspaceName, setWorkspaceName]   = useState("");
+  const [isRenaming, setIsRenaming]         = useState(false);
+  const [newName, setNewName]               = useState("");
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const fetchWorkspace = useCallback(async () => {
+    if (!token || !workspaceId) return;
+    try {
+      const ws = await api<{ name: string }>(`/api/workspaces/${workspaceId}`, { token });
+      setWorkspaceName(ws.name); setNewName(ws.name);
+    } catch {}
+  }, [token, workspaceId]);
+
+  const fetchTasks = useCallback(async () => {
+    if (!token || !workspaceId) return;
+    try {
+      setLoading(true);
+      const data = await api<Task[]>(`/api/tasks?workspaceId=${workspaceId}`, { token });
+      setTasks(data);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [token, workspaceId]);
+
+  useEffect(() => { fetchTasks(); fetchWorkspace(); }, [fetchTasks, fetchWorkspace]);
+
+  // DnD handlers
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setActiveTask(tasks.find(t => t._id === active.id) ?? null);
+  };
+  const handleDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over) return;
+    const aTask = tasks.find(t => t._id === active.id);
+    if (!aTask) return;
+    const overStatus = (over.data.current?.type === "Column" ? String(over.id) : tasks.find(t => t._id === over.id)?.status) as string;
+    if (!overStatus || aTask.status === overStatus) return;
+    setTasks(prev => prev.map(t => t._id === active.id ? { ...t, status: overStatus as Task["status"] } : t));
+  };
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setActiveTask(null);
+    if (!over) { saveBatchOrder(tasks); return; }
+    const aTask = tasks.find(t => t._id === active.id);
+    if (!aTask) return;
+    const oldStatus = aTask.status;
+    const newStatus: string = over.data.current?.type === "Column" ? String(over.id) : (tasks.find(t => t._id === over.id)?.status ?? oldStatus);
+    setTasks(prev => {
+      let next = [...prev];
+      const ai = next.findIndex(t => t._id === active.id);
+      const oi = next.findIndex(t => t._id === over.id);
+      if (ai === -1) return prev;
+      if (oldStatus !== newStatus) {
+        next[ai] = { ...next[ai], status: newStatus as Task["status"] };
+        if (oi !== -1 && next[oi].status === newStatus) { const [m] = next.splice(ai, 1); next.splice(next.findIndex(t => t._id === over.id), 0, m); }
+      } else if (active.id !== over.id) { next = arrayMove(next, ai, oi); }
+      saveBatchOrder(next); return next;
+    });
+  };
+
+  const saveBatchOrder = async (current: Task[]) => {
+    const payload = COLUMNS.flatMap(col => current.filter(t => t.status === col.id).map((t, i) => ({ _id: t._id, status: col.id, position: (i + 1) * 1024 })));
+    if (token && payload.length) await api("/api/tasks/batch", { method: "PUT", token, body: { tasks: payload } }).catch(console.error);
+  };
+
+  // CRUD
+  const handleCreateTask = async (data: { title: string; description: string; status: string; dueDate?: string }) => {
+    if (!token || !workspaceId) return;
+    const created = await api<Task>("/api/tasks", { method: "POST", token, body: { ...data, workspaceId } });
+    setTasks(prev => [created, ...prev]); setShowCreate(false);
+  };
+  const handleUpdateTask = async (updated: Partial<Task>) => {
+    if (!token || !editingTask) return;
+    const saved = await api<Task>(`/api/tasks/${editingTask._id}`, { method: "PUT", token, body: updated });
+    setTasks(prev => prev.map(t => t._id === saved._id ? saved : t));
+  };
+  const handleDeleteTask = async () => {
+    if (!token || !editingTask) return;
+    await api(`/api/tasks/${editingTask._id}`, { method: "DELETE", token });
+    setTasks(prev => prev.filter(t => t._id !== editingTask._id));
+  };
+
+  const handleRename = async () => {
+    if (!token || !workspaceId || !newName.trim()) return;
+    await api(`/api/workspaces/${workspaceId}`, { method: "PUT", token, body: { name: newName } });
+    setWorkspaceName(newName); setIsRenaming(false);
+    window.dispatchEvent(new Event("workspace-updated"));
+  };
+  const handleDeleteWorkspace = async () => {
+    if (!token || !workspaceId) return;
+    await api(`/api/workspaces/${workspaceId}`, { method: "DELETE", token });
+    window.dispatchEvent(new Event("workspace-updated")); router.push("/workspaces");
+  };
+
+  const openCreate = (status: string) => { setNewTaskStatus(status); setShowCreate(true); };
+  const getTasksForColumn = (colId: string) => tasks.filter(t => t.status === colId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+  if (!workspaceId) return <div className="p-8 text-gray-500">Please select a workspace.</div>;
+
+  const dropAnimation: DropAnimation = { sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0.5" } } }) };
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+      <div className="min-h-screen p-6 md:p-8 font-sans text-gray-900">
+
+        {/* ── Header ── */}
+        <header className="mb-8">
+          <div className="flex items-center justify-between gap-4 mb-1">
+            {isRenaming ? (
+              <div className="flex items-center gap-2">
+                <Input value={newName} onChange={e => setNewName(e.target.value)} className="text-2xl font-bold h-10 rounded-xl" autoFocus onKeyDown={e => e.key === "Enter" && handleRename()} />
+                <Button onClick={handleRename} size="sm" className="bg-blue-600 text-white rounded-xl">Save</Button>
+                <Button onClick={() => setIsRenaming(false)} size="sm" variant="ghost" className="rounded-xl">Cancel</Button>
+              </div>
+            ) : (
+              <h1 onClick={() => setIsRenaming(true)} className="text-2xl md:text-3xl font-bold text-gray-900 cursor-pointer hover:bg-gray-100 rounded-xl px-2 py-1 -ml-2 transition-colors group flex items-center gap-2" title="Click to rename">
+                {workspaceName || "Workspace"}
+                <Pencil className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </h1>
+            )}
+
+            <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl text-sm border border-red-100">Delete workspace</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border border-gray-100 shadow-xl" showCloseButton={false}>
+                <div className="h-1.5 bg-red-500 w-full" />
+                <div className="px-6 py-5 space-y-4">
+                  <DialogHeader><DialogTitle className="text-gray-900">Delete "{workspaceName}"?</DialogTitle></DialogHeader>
+                  <p className="text-sm text-gray-500 leading-relaxed">This will permanently delete the workspace and all its tasks. This action cannot be undone.</p>
+                  <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                    <Button variant="ghost" onClick={() => setShowDeleteDialog(false)} className="rounded-xl">Cancel</Button>
+                    <Button variant="destructive" onClick={handleDeleteWorkspace} className="rounded-xl">Delete forever</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <p className="text-sm text-gray-400 ml-0.5">Manage and organise your tasks</p>
+        </header>
+
+        {/* ── View mode tabs ── */}
+        <div className="mb-6 flex items-center justify-between">
+          <div className="inline-flex bg-gray-100 p-1 rounded-xl gap-1">
+            {VIEW_MODES.map(({ id, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setViewMode(id)}
+                className={cn("flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all", viewMode === id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {id}
+              </button>
+            ))}
+          </div>
+
+          {/* Quick add for non-board views */}
+          {viewMode !== "Board" && (
+            <Button onClick={() => openCreate("todo")} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-1.5">
+              <Plus className="h-4 w-4" /> New task
+            </Button>
           )}
         </div>
-      </main>
 
-      {/* Create Task Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
-          <DialogHeader>
-            <DialogTitle>Create New Task</DialogTitle>
-            <p className="text-sm text-gray-600">
-              Add a new task to your list.
-            </p>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Title</Label>
-              <Input
-                placeholder="Task title..."
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Input
-                placeholder="Task description..."
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Due Date</Label>
-              <Input
-                type="date"
-                value={newDueDate}
-                onChange={(e) => setNewDueDate(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end space-x-4 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setShowCreateDialog(false)}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleCreate} disabled={!newTitle.trim()}>
-                Create Task
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Task Dialog */}
-      <Dialog
-        open={!!editingTask}
-        onOpenChange={(open) => !open && setEditingTask(null)}
-      >
-        <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Task</DialogTitle>
-            <p className="text-sm text-gray-600">Update your task details.</p>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Title</Label>
-              <Input
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Input
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Due Date</Label>
-              <Input
-                type="date"
-                value={editDueDate}
-                onChange={(e) => setEditDueDate(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end space-x-4 pt-4">
-              <Button variant="outline" onClick={() => setEditingTask(null)}>
-                Cancel
-              </Button>
-              <Button onClick={handleEdit}>Save Changes</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Filter Dialog */}
-      <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-        <DialogContent className="w-[95vw] max-w-[425px] mx-auto">
-          <DialogHeader>
-            <DialogTitle>Filter Tasks</DialogTitle>
-            <p className="text-sm text-gray-600">
-              Filter tasks by status, date, or search term.
-            </p>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Search</Label>
-              <Input
-                placeholder="Search task titles..."
-                value={filters.search}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, search: e.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <div className="flex gap-2">
-                {(["all", "pending", "completed"] as const).map((s) => (
-                  <Button
-                    key={s}
-                    variant={filters.status === s ? "default" : "outline"}
-                    size="sm"
-                    onClick={() =>
-                      setFilters((prev) => ({ ...prev, status: s }))
-                    }
-                  >
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </Button>
+        {/* ── Content ── */}
+        {loading ? (
+          <div className="flex justify-center py-24"><Loader2 className="animate-spin text-blue-500 h-8 w-8" /></div>
+        ) : (
+          <>
+            {viewMode === "Board" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                {COLUMNS.map(col => (
+                  <TaskColumn key={col.id} col={col} tasks={getTasksForColumn(col.id)} onAddTask={openCreate} onEditTask={setEditingTask} />
                 ))}
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Date Range</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs">Start Date</Label>
-                  <Input
-                    type="date"
-                    onChange={(e) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        dateRange: {
-                          ...prev.dateRange,
-                          start: e.target.value || null,
-                        },
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">End Date</Label>
-                  <Input
-                    type="date"
-                    onChange={(e) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        dateRange: {
-                          ...prev.dateRange,
-                          end: e.target.value || null,
-                        },
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
+            )}
+            {viewMode === "List" && (
+              <ListView tasks={tasks} onEditTask={setEditingTask} onAddTask={openCreate} />
+            )}
+            {viewMode === "Table" && (
+              <TableView tasks={tasks} onEditTask={setEditingTask} onAddTask={openCreate} />
+            )}
+            {viewMode === "Timeline" && (
+              <TimelineView tasks={tasks} onEditTask={setEditingTask} onAddTask={openCreate} />
+            )}
+          </>
+        )}
 
-            <div className="flex flex-col sm:flex-row justify-between pt-4 space-y-2 sm:space-y-0 sm:space-x-2">
-              <Button variant="outline" onClick={clearFilters}>
-                Clear Filters
-              </Button>
-              <Button onClick={() => setIsFilterOpen(false)}>
-                Apply Filters
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        <DragOverlay dropAnimation={dropAnimation}>
+          {activeTask ? <TaskCard task={activeTask} /> : null}
+        </DragOverlay>
+      </div>
+
+      <CreateTaskDialog open={showCreate} onClose={() => setShowCreate(false)} initialStatus={newTaskStatus} onCreate={handleCreateTask} />
+      {editingTask && (
+        <EditTaskDialog task={editingTask} open={!!editingTask} onClose={() => setEditingTask(null)} onSave={handleUpdateTask} onDelete={handleDeleteTask} />
+      )}
+    </DndContext>
   );
 }

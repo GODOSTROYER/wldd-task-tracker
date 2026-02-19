@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import User from '../models/User';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email';
+import { createDemoWorkspaceForUser } from './workspaces';
 
 const router = Router();
 
@@ -139,6 +140,13 @@ router.post('/verify-email', async (req: Request, res: Response): Promise<void> 
     await user.save();
 
     const token = generateToken(user._id.toString());
+
+    // Create demo workspace for the newly verified user
+    try {
+      await createDemoWorkspaceForUser(user._id.toString());
+    } catch (demoErr) {
+      console.error('Failed to create demo workspace:', demoErr);
+    }
 
     res.status(200).json({
       message: 'Email verified successfully',

@@ -3,9 +3,12 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 export interface ITask extends Document {
   title: string;
   description: string;
-  status: 'pending' | 'completed';
+  status: 'todo' | 'in-progress' | 'in-review' | 'completed';
+  color?: string;
+  position: number;
   dueDate?: Date;
   owner: Types.ObjectId;
+  workspaceId: Types.ObjectId;
   createdAt: Date;
 }
 
@@ -24,19 +27,32 @@ const TaskSchema = new Schema<ITask>(
     status: {
       type: String,
       enum: {
-        values: ['pending', 'completed'],
-        message: 'Status must be either pending or completed',
+        values: ['todo', 'in-progress', 'in-review', 'completed'],
+        message: 'Status must be one of: todo, in-progress, in-review, completed',
       },
-      default: 'pending',
+      default: 'todo',
+    },
+    position: {
+      type: Number,
+      default: 0,
     },
     dueDate: {
       type: Date,
+      default: null,
+    },
+    color: {
+      type: String,
       default: null,
     },
     owner: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'Owner is required'],
+    },
+    workspaceId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: [true, 'Workspace ID is required'],
     },
   },
   {

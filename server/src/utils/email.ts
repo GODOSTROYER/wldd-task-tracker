@@ -1,15 +1,39 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const FROM_EMAIL = process.env.FROM_EMAIL || SMTP_USER;
+const FROM_NAME = process.env.FROM_NAME || 'Task Tracker';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-export async function sendVerificationEmail(to: string, otp: string): Promise<void> {
-  await resend.emails.send({
-    from: FROM,
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_PORT === 465,
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS,
+  },
+});
+
+async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+  const info = await transporter.sendMail({
+    from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
     to,
-    subject: 'Verify Your Email — Mini Task Tracker',
-    html: `
+    subject,
+    html,
+  });
+
+  console.log('Email sent:', { to, messageId: info.messageId });
+}
+
+export async function sendVerificationEmail(to: string, otp: string): Promise<void> {
+  await sendEmail(
+    to,
+    'Verify Your Email — Task Tracker',
+    `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
         <h2 style="color: #1e293b;">Verify your email</h2>
         <p style="color: #475569;">Enter this code to complete your registration:</p>
@@ -19,17 +43,16 @@ export async function sendVerificationEmail(to: string, otp: string): Promise<vo
         <p style="color: #94a3b8; font-size: 14px;">This code expires in 10 minutes. If you didn't create an account, ignore this email.</p>
       </div>
     `,
-  });
+  );
 }
 
 export async function sendPasswordResetEmail(to: string, resetToken: string): Promise<void> {
   const resetUrl = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
 
-  await resend.emails.send({
-    from: FROM,
+  await sendEmail(
     to,
-    subject: 'Reset Your Password — Mini Task Tracker',
-    html: `
+    'Reset Your Password — Task Tracker',
+    `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
         <h2 style="color: #1e293b;">Reset your password</h2>
         <p style="color: #475569;">Click the button below to set a new password:</p>
@@ -42,5 +65,5 @@ export async function sendPasswordResetEmail(to: string, resetToken: string): Pr
         <p style="color: #cbd5e1; font-size: 12px; word-break: break-all;">Or copy this link: ${resetUrl}</p>
       </div>
     `,
-  });
+  );
 }

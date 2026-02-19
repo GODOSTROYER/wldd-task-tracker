@@ -31,14 +31,15 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      await api('/api/auth/signup', {
+      const data = await api<{ message: string; email: string }>('/api/auth/signup', {
         method: 'POST',
         body: { name, email, password },
       });
-      // Redirect to verify-email page
+      console.log('Registration successful:', data);
       router.push(`/verify-email?email=${encodeURIComponent(email)}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Signup failed');
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : 'Registration failed';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -49,8 +50,10 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
-            <Trello className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">TrelloClone</span>
+            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+            </div>
+            <span className="text-2xl font-bold text-gray-900">Task Tracker</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h1>
           <p className="text-gray-600">Start tracking your tasks today</p>
@@ -74,6 +77,7 @@ export default function SignupPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your name"
+                  autoComplete="name"
                 />
               </div>
 
@@ -86,6 +90,7 @@ export default function SignupPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
+                  autoComplete="email"
                 />
               </div>
 
@@ -98,6 +103,7 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Create a strong password"
+                  autoComplete="new-password"
                 />
                 <PasswordRequirements password={password} />
               </div>

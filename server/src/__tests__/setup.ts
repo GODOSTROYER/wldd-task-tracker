@@ -9,16 +9,12 @@ jest.mock('ioredis', () => {
   return RedisMock;
 });
 
-// Mock Resend so tests don't send real emails
-jest.mock('resend', () => {
-  return {
-    Resend: jest.fn().mockImplementation(() => ({
-      emails: {
-        send: jest.fn().mockResolvedValue({ id: 'mock-email-id' }),
-      },
-    })),
-  };
-});
+// Mock Nodemailer so tests don't send real emails
+jest.mock('nodemailer', () => ({
+  createTransport: jest.fn().mockReturnValue({
+    sendMail: jest.fn().mockResolvedValue({ messageId: 'mock-message-id' }),
+  }),
+}));
 
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();

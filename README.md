@@ -4,14 +4,14 @@ A full-stack task management app built with **Next.js 15**, **Express**, **Mongo
 
 ## Tech Stack
 
-| Layer    | Technology                                                |
-| -------- | --------------------------------------------------------- |
-| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, shadcn/ui |
-| Backend  | Node.js, Express, TypeScript, Zod validation              |
-| Database | MongoDB (Mongoose ODM)                                    |
-| Caching  | Redis (ioredis)                                           |
-| Auth     | JWT + bcrypt, email verification via Resend               |
-| Testing  | Jest, Supertest, mongodb-memory-server, ioredis-mock      |
+| Layer    | Technology                                                   |
+| -------- | ------------------------------------------------------------ |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, shadcn/ui    |
+| Backend  | Node.js, Express, TypeScript, Zod validation                 |
+| Database | MongoDB (Mongoose ODM)                                       |
+| Caching  | Redis (ioredis)                                              |
+| Auth     | JWT + bcrypt, email verification via Nodemailer (Gmail SMTP) |
+| Testing  | Jest, Supertest, mongodb-memory-server, ioredis-mock         |
 
 ## Features
 
@@ -37,7 +37,7 @@ A full-stack task management app built with **Next.js 15**, **Express**, **Mongo
 │   │   ├── middleware/    # Auth + cache middleware
 │   │   ├── models/       # Mongoose schemas (User, Task)
 │   │   ├── routes/       # Express routes (auth, tasks)
-│   │   ├── utils/        # Email service (Resend)
+│   │   ├── utils/        # Email service (Nodemailer)
 │   │   ├── app.ts        # Express app setup
 │   │   └── server.ts     # Server entry point
 │   ├── .env.example
@@ -53,7 +53,7 @@ A full-stack task management app built with **Next.js 15**, **Express**, **Mongo
 - Node.js 18+
 - MongoDB (Atlas or local)
 - Redis (local or cloud)
-- [Resend](https://resend.com) API key (free tier works)
+- Gmail account with [App Password](https://myaccount.google.com/apppasswords) (for sending OTP/reset emails)
 
 ### 1. Clone the repository
 
@@ -68,7 +68,7 @@ cd wldd-task-tracker
 cd server
 npm install
 cp .env.example .env
-# Edit .env with your MongoDB URI, Redis URL, JWT secret, and Resend API key
+# Edit .env with your MongoDB URI, Redis URL, JWT secret, and Gmail SMTP credentials
 npm run dev
 ```
 
@@ -90,15 +90,19 @@ The frontend starts at `http://localhost:3000`.
 
 ### Backend (`server/.env`)
 
-| Variable         | Description                    | Example                  |
-| ---------------- | ------------------------------ | ------------------------ |
-| `PORT`           | Server port                    | `5000`                   |
-| `MONGO_URI`      | MongoDB connection string      | `mongodb+srv://...`      |
-| `REDIS_URL`      | Redis connection URL           | `redis://localhost:6379` |
-| `JWT_SECRET`     | Secret for signing JWTs        | `your_secret_here`       |
-| `RESEND_API_KEY` | Resend API key for emails      | `re_xxxx...`             |
-| `FROM_EMAIL`     | Sender email address           | `onboarding@resend.dev`  |
-| `FRONTEND_URL`   | Frontend URL (for reset links) | `http://localhost:3000`  |
+| Variable       | Description                    | Example                  |
+| -------------- | ------------------------------ | ------------------------ |
+| `PORT`         | Server port                    | `5000`                   |
+| `MONGO_URI`    | MongoDB connection string      | `mongodb+srv://...`      |
+| `REDIS_URL`    | Redis connection URL           | `redis://localhost:6379` |
+| `JWT_SECRET`   | Secret for signing JWTs        | `your_secret_here`       |
+| `SMTP_HOST`    | SMTP server host               | `smtp.gmail.com`         |
+| `SMTP_PORT`    | SMTP server port               | `587`                    |
+| `SMTP_USER`    | SMTP username (email)          | `you@gmail.com`          |
+| `SMTP_PASS`    | Gmail App Password             | `abcdefghijklmnop`       |
+| `FROM_EMAIL`   | Sender email address           | `you@gmail.com`          |
+| `FROM_NAME`    | Sender display name            | `Task Tracker`           |
+| `FRONTEND_URL` | Frontend URL (for reset links) | `http://localhost:3000`  |
 
 ### Frontend (`.env.local`)
 

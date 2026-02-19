@@ -30,9 +30,10 @@ export default function LoginPage() {
         method: 'POST',
         body: { email, password },
       });
+      console.log('Login successful:', data);
       setToken(data.token, data.user);
-      router.push('/tasks');
-    } catch (err) {
+      router.push('/workspaces');
+    } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Login failed';
       if (message.includes('verify your email')) {
         // Redirect to verify-email page
@@ -50,8 +51,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
-            <Trello className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">TrelloClone</span>
+            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+            </div>
+            <span className="text-2xl font-bold text-gray-900">Task Tracker</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
           <p className="text-gray-600">Sign in to your task tracker</p>
@@ -75,6 +78,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
+                  autoComplete="email"
                 />
               </div>
 
@@ -95,6 +99,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete="current-password"
                 />
               </div>
 
