@@ -4,6 +4,7 @@ import { useUser } from "@/lib/contexts/AuthContext";
 import {
   ArrowLeft,
   Filter,
+  Layout,
   LogOut,
   MoreHorizontal,
   Settings,
