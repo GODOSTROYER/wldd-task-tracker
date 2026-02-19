@@ -1,4 +1,19 @@
+/**
+ * @file email.ts — Transactional email delivery via SMTP (Nodemailer)
+ *
+ * Exports:
+ *   sendVerificationEmail(to, otp)         — Sends a styled 6-digit OTP email
+ *   sendPasswordResetEmail(to, resetToken) — Sends a password reset link email
+ *
+ * Configuration is pulled from env vars:
+ *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL, FROM_NAME, FRONTEND_URL
+ *
+ * Defaults to Gmail SMTP on port 587 if not configured.
+ */
+
 import nodemailer from 'nodemailer';
+
+// ─── SMTP Configuration ──────────────────────────────────────────────────────
 
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -18,6 +33,9 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// ─── Internal Helper ──────────────────────────────────────────────────────────
+
+/** Send a generic HTML email. Logs the messageId on success. */
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const info = await transporter.sendMail({
     from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
@@ -29,6 +47,9 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
   console.log('Email sent:', { to, messageId: info.messageId });
 }
 
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/** Send a 6-digit OTP verification email with styled HTML. */
 export async function sendVerificationEmail(to: string, otp: string): Promise<void> {
   await sendEmail(
     to,
@@ -46,6 +67,7 @@ export async function sendVerificationEmail(to: string, otp: string): Promise<vo
   );
 }
 
+/** Send a password reset email with a clickable link (valid for 1 hour). */
 export async function sendPasswordResetEmail(to: string, resetToken: string): Promise<void> {
   const resetUrl = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
 

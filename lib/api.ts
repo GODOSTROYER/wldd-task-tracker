@@ -60,14 +60,27 @@ export interface User {
 export interface Task {
   _id: string;
   title: string;
-  description: string;
-  status: 'todo' | 'in-progress' | 'in-review' | 'completed';
-  color?: string | null;
-  dueDate: string | null;
+  description?: string;
+  status: "todo" | "in-progress" | "in-review" | "completed";
+  priority: "low" | "medium" | "high";
+  color?: string;
+  position: number;
+  dueDate?: string | null;
   owner: string;
+  workspaceId: string;
   createdAt: string;
-  position?: number;
+  updatedAt?: string;
 }
+
+export const updateProfile = async (data: { name?: string; password?: string }) => {
+  const token = getToken();
+  if (!token) throw new Error("No token found");
+  return api<{ message: string; user: User }>('/api/auth/profile', {
+    method: 'PUT',
+    token,
+    body: data,
+  });
+};
 
 export interface AuthResponse {
   token: string;

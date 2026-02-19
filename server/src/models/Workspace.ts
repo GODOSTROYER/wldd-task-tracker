@@ -1,3 +1,11 @@
+/**
+ * @file models/Workspace.ts — Mongoose Workspace schema and model
+ *
+ * Workspaces group tasks together. Each workspace has an owner and a members
+ * array for future collaboration features.
+ *
+ * Exports: Workspace model, IWorkspace interface
+ */
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface IWorkspace extends Document {

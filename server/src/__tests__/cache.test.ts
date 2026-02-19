@@ -1,8 +1,10 @@
 import request from 'supertest';
 import app from '../app';
 import User from '../models/User';
+import Workspace from '../models/Workspace';
 
 let token: string;
+let workspaceId: string;
 
 async function createVerifiedUser() {
   await request(app)
@@ -15,12 +17,23 @@ async function createVerifiedUser() {
     .post('/api/auth/login')
     .send({ email: 'cacheuser@example.com', password: 'Password1!' });
 
-  return loginRes.body.token;
+  const userId = loginRes.body.user.id;
+  const userToken = loginRes.body.token;
+
+  const workspace = await Workspace.create({
+    name: 'Cache Test Workspace',
+    owner: userId,
+    members: [userId],
+  });
+
+  return { token: userToken, workspaceId: workspace._id.toString() };
 }
 
 describe('Redis Caching', () => {
   beforeEach(async () => {
-    token = await createVerifiedUser();
+    const user = await createVerifiedUser();
+    token = user.token;
+    workspaceId = user.workspaceId;
   });
 
   it('should cache GET /api/tasks result', async () => {
@@ -28,7 +41,7 @@ describe('Redis Caching', () => {
     await request(app)
       .post('/api/tasks')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Cached Task' });
+      .send({ title: 'Cached Task', workspaceId });
 
     // First GET — should fetch from DB and cache
     const res1 = await request(app)
@@ -56,7 +69,7 @@ describe('Redis Caching', () => {
     await request(app)
       .post('/api/tasks')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'New Task' });
+      .send({ title: 'New Task', workspaceId });
 
     // GET should return fresh data (including the new task)
     const res = await request(app)
@@ -71,7 +84,7 @@ describe('Redis Caching', () => {
     const createRes = await request(app)
       .post('/api/tasks')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Before Update' });
+      .send({ title: 'Before Update', workspaceId });
     const taskId = createRes.body._id;
 
     await request(app)
@@ -96,7 +109,7 @@ describe('Redis Caching', () => {
     const createRes = await request(app)
       .post('/api/tasks')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'To Be Deleted' });
+      .send({ title: 'To Be Deleted', workspaceId });
     const taskId = createRes.body._id;
 
     await request(app)

@@ -93,6 +93,12 @@ const STATUS_META: Record<string, { label: string; color: string; dot: string; b
   "completed":   { label: "Completed",    color: "text-emerald-600 bg-emerald-50",dot: "bg-emerald-500", border: "border-emerald-100" },
 };
 
+const PRIORITY_META: Record<string, { label: string; color: string; dot: string }> = {
+  "high":   { label: "High",   color: "text-red-700 bg-red-50 border-red-100",     dot: "bg-red-500" },
+  "medium": { label: "Medium", color: "text-amber-700 bg-amber-50 border-amber-100", dot: "bg-amber-400" },
+  "low":    { label: "Low",    color: "text-blue-700 bg-blue-50 border-blue-100",   dot: "bg-blue-400" },
+};
+
 const AVATARS = ["https://i.pravatar.cc/150?u=1", "https://i.pravatar.cc/150?u=2"];
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -107,7 +113,7 @@ function TaskStatusIcon({ status, dueDate }: { status: string; dueDate?: string 
 }
 
 /** Red pill shown next to due dates on overdue tasks */
-function OverduePill({ dueDate, status }: { dueDate: string | null; status: string }) {
+function OverduePill({ dueDate, status }: { dueDate?: string | null; status: string }) {
   if (!dueDate || status === "completed") return null;
   if (new Date(dueDate) >= new Date()) return null;
   return <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full leading-none whitespace-nowrap">OVERDUE</span>;
@@ -123,7 +129,17 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function DueDateChip({ dueDate, status }: { dueDate: string | null; status: string }) {
+function PriorityBadge({ priority }: { priority: string }) {
+  const m = PRIORITY_META[priority] ?? PRIORITY_META["medium"];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border", m.color)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", m.dot)} />
+      {m.label}
+    </span>
+  );
+}
+
+function DueDateChip({ dueDate, status }: { dueDate?: string | null; status: string }) {
   if (!dueDate) return null;
   const overdue = new Date(dueDate) < new Date() && status !== "completed";
   return (
@@ -151,13 +167,18 @@ function EditTaskDialog({ task, open, onClose, onSave, onDelete }: EditTaskDialo
   const [title, setTitle]     = useState(task.title);
   const [desc, setDesc]       = useState(task.description ?? "");
   const [status, setStatus]   = useState(task.status);
+  const [priority, setPriority] = useState<Task["priority"]>(task.priority ?? "medium");
   const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.split("T")[0] : "");
   const [saving, setSaving]   = useState(false);
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
-    setTitle(task.title); setDesc(task.description ?? ""); setStatus(task.status);
-    setDueDate(task.dueDate ? task.dueDate.split("T")[0] : ""); setConfirming(false);
+    setTitle(task.title);
+    setDesc(task.description ?? "");
+    setStatus(task.status);
+    setPriority(task.priority ?? "medium");
+    setDueDate(task.dueDate ? task.dueDate.split("T")[0] : "");
+    setConfirming(false);
   }, [task]);
 
   const colDef = COLUMNS.find(c => c.id === status);
@@ -165,11 +186,15 @@ function EditTaskDialog({ task, open, onClose, onSave, onDelete }: EditTaskDialo
   const handleSave = async () => {
     if (!title.trim()) return;
     setSaving(true);
-    await onSave({ title: title.trim(), description: desc, status, dueDate: dueDate || null });
-    setSaving(false); onClose();
+    await onSave({ title: title.trim(), description: desc, status, priority, dueDate: dueDate || undefined });
+    setSaving(false);
+    onClose();
   };
   const handleDelete = async () => {
-    setSaving(true); await onDelete(); setSaving(false); onClose();
+    setSaving(true);
+    await onDelete();
+    setSaving(false);
+    onClose();
   };
 
   return (
@@ -199,10 +224,22 @@ function EditTaskDialog({ task, open, onClose, onSave, onDelete }: EditTaskDialo
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Due Date</Label>
-              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="rounded-xl" />
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Priority</Label>
+              <Select value={priority} onValueChange={v => setPriority(v as Task["priority"])}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Due Date</Label>
+            <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="rounded-xl" />
+          </div>
+
           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
             {confirming ? (
               <div className="flex items-center gap-2">
@@ -231,22 +268,25 @@ interface CreateTaskDialogProps {
   open: boolean;
   onClose: () => void;
   initialStatus: string;
-  onCreate: (data: { title: string; description: string; status: string; dueDate?: string }) => Promise<void>;
+  onCreate: (data: { title: string; description: string; status: string; priority: string; dueDate?: string }) => Promise<void>;
 }
 
 function CreateTaskDialog({ open, onClose, initialStatus, onCreate }: CreateTaskDialogProps) {
   const [title, setTitle]   = useState("");
   const [desc, setDesc]     = useState("");
   const [status, setStatus] = useState(initialStatus);
+  const [priority, setPriority] = useState("medium");
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => setStatus(initialStatus), [initialStatus]);
-  useEffect(() => { if (!open) { setTitle(""); setDesc(""); setDueDate(""); setSaving(false); } }, [open]);
+  useEffect(() => { if (!open) { setTitle(""); setDesc(""); setPriority("medium"); setDueDate(""); setSaving(false); } }, [open]);
 
   const handleCreate = async () => {
     if (!title.trim()) return;
-    setSaving(true); await onCreate({ title: title.trim(), description: desc, status, dueDate: dueDate || undefined }); setSaving(false);
+    setSaving(true);
+    await onCreate({ title: title.trim(), description: desc, status, priority, dueDate: dueDate || undefined });
+    setSaving(false);
   };
 
   return (
@@ -272,9 +312,20 @@ function CreateTaskDialog({ open, onClose, initialStatus, onCreate }: CreateTask
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Due Date <span className="text-gray-300 normal-case font-normal">(opt.)</span></Label>
-              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="rounded-xl" />
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Priority</Label>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Due Date <span className="text-gray-300 normal-case font-normal">(opt.)</span></Label>
+            <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="rounded-xl" />
           </div>
           <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
             <Button variant="ghost" onClick={onClose} className="rounded-xl text-gray-500">Cancel</Button>
@@ -295,8 +346,10 @@ function TaskCard({ task, onEdit }: { task: Task; onEdit?: () => void }) {
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
   return (
     <div className="group/card bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-100 hover:ring-1 hover:ring-blue-100 transition-all duration-150 cursor-grab active:cursor-grabbing space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <StatusBadge status={task.status} />
+        <PriorityBadge priority={task.priority} />
+        <div className="flex-1" />
         <button
           onPointerDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onEdit?.(); }}
@@ -450,7 +503,7 @@ function ListView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask:
 
 // ─── Table View ───────────────────────────────────────────────────────────────
 
-type SortKey = "title" | "status" | "dueDate" | "createdAt";
+type SortKey = "title" | "status" | "dueDate" | "createdAt" | "priority";
 
 function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask: (t: Task) => void; onAddTask: (s: string) => void }) {
   const [sortKey, setSortKey]   = useState<SortKey>("status");
@@ -460,11 +513,17 @@ function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask
     return [...tasks].sort((a, b) => {
       let av: string = a[sortKey] ?? "";
       let bv: string = b[sortKey] ?? "";
+      
       if (sortKey === "status") {
         const order = ["todo", "in-progress", "in-review", "completed"];
         av = String(order.indexOf(a.status));
         bv = String(order.indexOf(b.status));
+      } else if (sortKey === "priority") {
+         const order = ["low", "medium", "high"];
+         av = String(order.indexOf(a.priority));
+         bv = String(order.indexOf(b.priority));
       }
+      
       return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     });
   }, [tasks, sortKey, sortDir]);
@@ -499,6 +558,7 @@ function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask
             <tr>
               <SortHeader label="Title"    col="title" />
               <SortHeader label="Status"   col="status" />
+              <SortHeader label="Priority" col="priority" />
               <SortHeader label="Due Date" col="dueDate" />
               <SortHeader label="Created"  col="createdAt" />
               <th className="px-4 py-3" />
@@ -529,6 +589,9 @@ function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask
                     {/* Status */}
                     <td className="px-4 py-3.5">
                       <StatusBadge status={task.status} />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <PriorityBadge priority={task.priority} />
                     </td>
                     {/* Due date */}
                     <td className="px-4 py-3.5">
@@ -600,15 +663,8 @@ function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditT
 
   const todayPct = dayPct(today);
 
-  const COL_COLORS: Record<string, string> = {
-    "todo": "bg-blue-500", "in-progress": "bg-amber-400", "in-review": "bg-violet-500", "completed": "bg-emerald-500"
-  };
-  const COL_TEXT: Record<string, string> = {
-    "todo": "text-blue-700", "in-progress": "text-amber-700", "in-review": "text-violet-700", "completed": "text-emerald-700"
-  };
-  const COL_BG: Record<string, string> = {
-    "todo": "bg-blue-50", "in-progress": "bg-amber-50", "in-review": "bg-violet-50", "completed": "bg-emerald-50"
-  };
+  const colColor = (status: string) => COLUMNS.find(c => c.id === status)?.color ?? "bg-gray-400";
+  const colTextColor = (status: string) => COLUMNS.find(c => c.id === status)?.textColor ?? "text-gray-600";
 
   // Month labels
   const monthLabels: { label: string; pct: number }[] = [];
@@ -637,12 +693,15 @@ function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditT
         <div className="overflow-x-auto">
           <div className="min-w-[700px]">
             {/* Month header */}
-            <div className="relative h-8 border-b border-gray-100 bg-gray-50/60">
-              {monthLabels.map((m, i) => (
-                <div key={i} className="absolute top-0 h-full flex items-center" style={{ left: `calc(200px + ${m.pct}% * (100% - 200px) / 100)` }}>
-                  <span className="text-xs font-semibold text-gray-500 px-2 whitespace-nowrap">{m.label}</span>
-                </div>
-              ))}
+            <div className="relative h-8 border-b border-gray-100 bg-gray-50/60 flex">
+              <div className="w-[200px] shrink-0 border-r border-gray-200/50 bg-gray-50" />
+              <div className="flex-1 relative">
+                {monthLabels.map((m, i) => (
+                  <div key={i} className="absolute top-0 h-full flex items-center" style={{ left: `${m.pct}%` }}>
+                    <span className="text-xs font-semibold text-gray-500 px-2 whitespace-nowrap pl-2 border-l border-gray-300/50 h-4 flex items-center">{m.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Day header (abbreviated) */}
@@ -695,12 +754,12 @@ function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditT
                       >
                         <div className={cn(
                           "h-4 w-4 rounded-full border-2 border-white shadow-sm transition-transform hover:scale-125",
-                          isOverdue ? "bg-red-400" : (COL_COLORS[task.status] ?? "bg-gray-400")
+                          isOverdue ? "bg-red-400" : colColor(task.status)
                         )} />
                       </div>
                       {/* Label to the right of dot */}
                       <span
-                        className={cn("absolute text-xs font-medium whitespace-nowrap flex items-center gap-1.5", COL_TEXT[task.status] ?? "text-gray-600")}
+                        className={cn("absolute text-xs font-medium whitespace-nowrap flex items-center gap-1.5", colTextColor(task.status))}
                         style={{ left: `calc(${Math.max(0, Math.min(95, duePct))}% + 14px)` }}
                       >
                         {new Date(task.dueDate!).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
@@ -831,15 +890,22 @@ export default function TasksPage({ workspaceId }: TasksPageProps) {
   };
 
   const saveBatchOrder = async (current: Task[]) => {
-    const payload = COLUMNS.flatMap(col => current.filter(t => t.status === col.id).map((t, i) => ({ _id: t._id, status: col.id, position: (i + 1) * 1024 })));
-    if (token && payload.length) await api("/api/tasks/batch", { method: "PUT", token, body: { tasks: payload } }).catch(console.error);
+    const payload = COLUMNS.flatMap(col =>
+      current
+        .filter(t => t.status === col.id)
+        .map((t, i) => ({ _id: t._id, status: col.id, position: (i + 1) * 1024 }))
+    );
+    if (token && payload.length) {
+      await api("/api/tasks/batch", { method: "PUT", token, body: { tasks: payload } }).catch(console.error);
+    }
   };
 
   // CRUD
-  const handleCreateTask = async (data: { title: string; description: string; status: string; dueDate?: string }) => {
+  const handleCreateTask = async (data: { title: string; description: string; status: string; priority: string; dueDate?: string }) => {
     if (!token || !workspaceId) return;
     const created = await api<Task>("/api/tasks", { method: "POST", token, body: { ...data, workspaceId } });
-    setTasks(prev => [created, ...prev]); setShowCreate(false);
+    setTasks(prev => [created, ...prev]);
+    setShowCreate(false);
   };
   const handleUpdateTask = async (updated: Partial<Task>) => {
     if (!token || !editingTask) return;

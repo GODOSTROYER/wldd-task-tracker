@@ -1,16 +1,19 @@
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app';
 import User from '../models/User';
+import Workspace from '../models/Workspace';
 
 let token: string;
 let userId: string;
+let workspaceId: string;
 
 let otherToken: string;
+let otherWorkspaceId: string;
 
 /**
- * Create a verified user directly in the DB and return a JWT.
- * This bypasses the OTP email flow, which is tested separately in auth.test.ts.
+ * Create a verified user directly in the DB and return a JWT + Workspace ID.
  */
 async function createVerifiedUser(name: string, email: string, password: string) {
   // Sign up through the API (creates user + OTP)
@@ -26,9 +29,20 @@ async function createVerifiedUser(name: string, email: string, password: string)
     .post('/api/auth/login')
     .send({ email, password });
 
+  const userId = loginRes.body.user.id;
+  const token = loginRes.body.token;
+
+  // Create a default workspace for the user
+  const workspace = await Workspace.create({
+    name: `${name}'s Workspace`,
+    owner: userId,
+    members: [userId],
+  });
+
   return {
-    token: loginRes.body.token,
-    userId: loginRes.body.user.id,
+    token,
+    userId,
+    workspaceId: workspace._id.toString(),
   };
 }
 
@@ -37,9 +51,11 @@ describe('Task Endpoints', () => {
     const user = await createVerifiedUser('Task User', 'taskuser@example.com', 'Password1!');
     token = user.token;
     userId = user.userId;
+    workspaceId = user.workspaceId;
 
     const other = await createVerifiedUser('Other User', 'other@example.com', 'Password1!');
     otherToken = other.token;
+    otherWorkspaceId = other.workspaceId;
   });
 
   describe('POST /api/tasks', () => {
@@ -47,20 +63,21 @@ describe('Task Endpoints', () => {
       const res = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'My Task', description: 'Do something' });
+        .send({ title: 'My Task', description: 'Do something', workspaceId });
 
       expect(res.status).toBe(201);
       expect(res.body.title).toBe('My Task');
       expect(res.body.description).toBe('Do something');
-      expect(res.body.status).toBe('pending');
+      expect(res.body.status).toBe('todo');
       expect(res.body.owner).toBe(userId);
+      expect(res.body.workspaceId).toBe(workspaceId);
     });
 
     it('should return 400 for missing title', async () => {
       const res = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ description: 'No title' });
+        .send({ description: 'No title', workspaceId });
 
       expect(res.status).toBe(400);
     });
@@ -68,7 +85,7 @@ describe('Task Endpoints', () => {
     it('should return 401 without token', async () => {
       const res = await request(app)
         .post('/api/tasks')
-        .send({ title: 'No Auth' });
+        .send({ title: 'No Auth', workspaceId });
 
       expect(res.status).toBe(401);
     });
@@ -79,16 +96,16 @@ describe('Task Endpoints', () => {
       await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Task 1' });
+        .send({ title: 'Task 1', workspaceId });
       await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Task 2' });
+        .send({ title: 'Task 2', workspaceId });
       // Other user's task
       await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${otherToken}`)
-        .send({ title: 'Other Task' });
+        .send({ title: 'Other Task', workspaceId: otherWorkspaceId });
     });
 
     it('should list only the logged-in user tasks', async () => {
@@ -98,8 +115,17 @@ describe('Task Endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(2);
-      expect(res.body[0].title).toBe('Task 2'); // sorted by createdAt desc
-      expect(res.body[1].title).toBe('Task 1');
+      expect(res.body[0].title).toBe('Task 1'); // sorted by position asc
+      expect(res.body[1].title).toBe('Task 2');
+    });
+
+    it('should filter by workspaceId', async () => {
+      const res = await request(app)
+        .get(`/api/tasks?workspaceId=${workspaceId}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(2);
     });
   });
 
@@ -110,7 +136,7 @@ describe('Task Endpoints', () => {
       const res = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Update Me' });
+        .send({ title: 'Update Me', workspaceId });
       taskId = res.body._id;
     });
 
@@ -131,7 +157,7 @@ describe('Task Endpoints', () => {
         .set('Authorization', `Bearer ${otherToken}`)
         .send({ status: 'completed' });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
     });
 
     it('should return 404 for non-existent task', async () => {
@@ -151,7 +177,7 @@ describe('Task Endpoints', () => {
       const res = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Delete Me' });
+        .send({ title: 'Delete Me', workspaceId });
       taskId = res.body._id;
     });
 
@@ -175,7 +201,7 @@ describe('Task Endpoints', () => {
         .delete(`/api/tasks/${taskId}`)
         .set('Authorization', `Bearer ${otherToken}`);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
     });
 
     it('should return 404 when deleting non-existent task', async () => {
@@ -192,7 +218,7 @@ describe('Task Endpoints', () => {
       const res = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Due Task', dueDate: '2025-12-31' });
+        .send({ title: 'Due Task', dueDate: '2025-12-31', workspaceId });
 
       expect(res.status).toBe(201);
       expect(res.body.dueDate).toBeDefined();
@@ -202,7 +228,7 @@ describe('Task Endpoints', () => {
       const res = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Completed Task', status: 'completed' });
+        .send({ title: 'Completed Task', status: 'completed', workspaceId });
 
       expect(res.status).toBe(201);
       expect(res.body.status).toBe('completed');
@@ -212,7 +238,7 @@ describe('Task Endpoints', () => {
       const createRes = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Test' });
+        .send({ title: 'Test', workspaceId });
 
       const res = await request(app)
         .put(`/api/tasks/${createRes.body._id}`)
@@ -226,7 +252,7 @@ describe('Task Endpoints', () => {
       const createRes = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Original', description: 'Old desc' });
+        .send({ title: 'Original', description: 'Old desc', workspaceId });
 
       const res = await request(app)
         .put(`/api/tasks/${createRes.body._id}`)
@@ -242,7 +268,7 @@ describe('Task Endpoints', () => {
       const createRes = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'No date' });
+        .send({ title: 'No date', workspaceId });
 
       const res = await request(app)
         .put(`/api/tasks/${createRes.body._id}`)
@@ -257,7 +283,7 @@ describe('Task Endpoints', () => {
       const createRes = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Has date', dueDate: '2025-12-31' });
+        .send({ title: 'Has date', dueDate: '2025-12-31', workspaceId });
 
       const res = await request(app)
         .put(`/api/tasks/${createRes.body._id}`)

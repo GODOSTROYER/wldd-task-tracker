@@ -1,9 +1,19 @@
+/**
+ * @file models/Task.ts — Mongoose Task schema and model
+ *
+ * Defines the ITask interface and TaskSchema with fields for title, description,
+ * status (kanban column), priority, color, position (sort order), dueDate, owner,
+ * and workspaceId. Indexed on `owner` and `status` for query performance.
+ *
+ * Exports: Task model, ITask interface
+ */
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface ITask extends Document {
   title: string;
   description: string;
   status: 'todo' | 'in-progress' | 'in-review' | 'completed';
+  priority: 'low' | 'medium' | 'high';
   color?: string;
   position: number;
   dueDate?: Date;
@@ -26,11 +36,17 @@ const TaskSchema = new Schema<ITask>(
     },
     status: {
       type: String,
-      enum: {
-        values: ['todo', 'in-progress', 'in-review', 'completed'],
-        message: 'Status must be one of: todo, in-progress, in-review, completed',
-      },
+      enum: ['todo', 'in-progress', 'in-review', 'completed'],
       default: 'todo',
+    },
+    priority: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'medium',
+    },
+    color: {
+      type: String,
+      default: null,
     },
     position: {
       type: Number,
@@ -38,10 +54,6 @@ const TaskSchema = new Schema<ITask>(
     },
     dueDate: {
       type: Date,
-      default: null,
-    },
-    color: {
-      type: String,
       default: null,
     },
     owner: {

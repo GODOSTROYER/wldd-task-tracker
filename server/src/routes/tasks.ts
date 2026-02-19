@@ -1,18 +1,38 @@
+/**
+ * @file routes/tasks.ts — Task CRUD and batch update API
+ *
+ * All routes require JWT authentication (via authMiddleware).
+ * Tasks are scoped to the authenticated user (owner) and optionally a workspace.
+ *
+ * Endpoints:
+ *   GET    /           — List tasks (optionally filtered by workspaceId)
+ *   PUT    /batch      — Batch update status/position (for drag-and-drop reordering)
+ *   POST   /           — Create a new task
+ *   PUT    /:id        — Update a single task
+ *   DELETE /:id        — Delete a single task
+ *
+ * Redis caching is used for GET requests without a workspace filter.
+ * Cache is invalidated on every write operation (POST, PUT, DELETE, batch).
+ */
+
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import Task from '../models/Task';
-import authMiddleware, { AuthRequest } from '../middleware/auth';
-import { getCachedTasks, setCachedTasks, invalidateCache } from '../middleware/cache';
+import authMiddleware, { AuthRequest } from '../middleware';
+import { getCachedTasks, setCachedTasks, invalidateCache } from '../middleware';
 
 const router = Router();
 
 // All task routes require authentication
 router.use(authMiddleware);
 
+// ─── Validation Schemas ───────────────────────────────────────────────────────
+
 const createTaskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional().default(''),
   status: z.enum(['todo', 'in-progress', 'in-review', 'completed']).optional().default('todo'),
+  priority: z.enum(['low', 'medium', 'high']).optional().default('medium'),
   dueDate: z.string().datetime({ offset: true }).optional().nullable()
     .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable()),
   color: z.string().optional().nullable(),
@@ -23,69 +43,67 @@ const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
   status: z.enum(['todo', 'in-progress', 'in-review', 'completed']).optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
   dueDate: z.string().datetime({ offset: true }).optional().nullable()
     .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable()),
   color: z.string().optional().nullable(),
 });
 
-// GET /api/tasks — list tasks for logged-in user
+// ─── GET / — List tasks ───────────────────────────────────────────────────────
+
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
     const { workspaceId } = req.query;
 
-    // Check Redis cache first
-    // Check Redis cache first (only if no specific workspace filter for now to keep it simple, or key by workspace)
-    // For now, let's bypass cache if workspaceId is present to avoid complexity
+    // Use Redis cache when listing all tasks (no workspace filter)
     if (!workspaceId) {
-        const cached = await getCachedTasks(userId);
-        if (cached) {
-          res.status(200).json(JSON.parse(cached));
-          return;
-        }
+      const cached = await getCachedTasks(userId);
+      if (cached) {
+        res.status(200).json(JSON.parse(cached));
+        return;
+      }
     }
 
     const query: any = { owner: userId };
-    
-    // If workspaceId is provided, filter by it.
-    // If not, maybe return all? Or return none? 
-    // User asked to organize by workspace. Let's require it or return empty if not provided for now, 
-    // but better to allow filtering.
     if (workspaceId) {
-       query.workspaceId = workspaceId;
+      query.workspaceId = workspaceId;
     }
 
     const tasks = await Task.find(query).sort({ position: 1, createdAt: -1 });
 
-    // Cache the result
-    // (Optional: update cache implementation to handle workspace-specific caching later)
-    
+    // Cache the result when no workspace filter is applied
+    if (!workspaceId) {
+      await setCachedTasks(userId, JSON.stringify(tasks));
+    }
+
     res.status(200).json(tasks);
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// PUT /api/tasks/batch - Batch update tasks (for reordering)
+// ─── PUT /batch — Batch update (drag-and-drop reordering) ─────────────────────
+
 router.put('/batch', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { tasks } = req.body; // Expect array of { _id, status, position }
+    const { tasks } = req.body;
     if (!Array.isArray(tasks)) {
       res.status(400).json({ message: 'Tasks must be an array' });
       return;
     }
 
     const userId = req.user!.id;
-    
-    // Use bulkWrite for efficiency
+
+    // Use bulkWrite for efficient batch updates
     const operations = tasks.map((task: any) => ({
       updateOne: {
         filter: { _id: task._id, owner: userId },
-        update: { 
-          $set: { 
-            status: task.status, 
-            position: task.position 
-          } 
+        update: {
+          $set: {
+            status: task.status,
+            position: task.position
+          }
         }
       }
     }));
@@ -94,9 +112,7 @@ router.put('/batch', async (req: AuthRequest, res: Response): Promise<void> => {
       await Task.bulkWrite(operations);
     }
 
-    // Invalidate cache since multiple tasks changed
     await invalidateCache(userId);
-
     res.status(200).json({ message: 'Tasks updated' });
   } catch (err) {
     console.error(err);
@@ -104,42 +120,44 @@ router.put('/batch', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// POST /api/tasks - Create a new task
+// ─── POST / — Create a new task ───────────────────────────────────────────────
+
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      const parsed = createTaskSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({ message: 'Validation error', errors: parsed.error.flatten().fieldErrors });
-        return;
-      }
-  
-      const userId = req.user!.id;
-
-      // Get max position for new task to append it
-      const maxPosTask = await Task.findOne({ 
-          owner: userId, 
-          workspaceId: parsed.data.workspaceId, 
-          status: parsed.data.status 
-      }).sort({ position: -1 });
-      
-      const position = maxPosTask ? maxPosTask.position + 1024 : 1024; // Spacing for safe reordering
-
-      const task = new Task({
-        ...parsed.data,
-        owner: userId,
-        position,
-      });
-  
-      await task.save();
-      await invalidateCache(userId);
-  
-      res.status(201).json(task);
-    } catch (err) {
-      res.status(500).json({ message: 'Server error' });
+  try {
+    const parsed = createTaskSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: 'Validation error', errors: parsed.error.flatten().fieldErrors });
+      return;
     }
+
+    const userId = req.user!.id;
+
+    // Calculate position: append after the last task in the same column
+    const maxPosTask = await Task.findOne({
+      owner: userId,
+      workspaceId: parsed.data.workspaceId,
+      status: parsed.data.status
+    }).sort({ position: -1 });
+
+    const position = maxPosTask ? maxPosTask.position + 1024 : 1024;
+
+    const task = new Task({
+      ...parsed.data,
+      owner: userId,
+      position,
+    });
+
+    await task.save();
+    await invalidateCache(userId);
+
+    res.status(201).json(task);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
-// PUT /api/tasks/:id - Update a task
+// ─── PUT /:id — Update a single task ──────────────────────────────────────────
+
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const parsed = updateTaskSchema.safeParse(req.body);
@@ -166,8 +184,8 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// DELETE /api/tasks/:id - Delete a task
-// DELETE /api/tasks/:id - Delete a task
+// ─── DELETE /:id — Delete a single task ───────────────────────────────────────
+
 router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -179,8 +197,6 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
     }
 
     await task.deleteOne();
-
-    // Invalidate cache
     await invalidateCache(userId);
 
     res.status(200).json({ message: 'Task deleted' });

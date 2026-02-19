@@ -1,14 +1,32 @@
+/**
+ * @file routes/auth.ts — Authentication & user management API
+ *
+ * Endpoints:
+ *   POST /signup          — Register new account, send OTP email
+ *   POST /verify-email    — Verify email with 6-digit OTP
+ *   POST /resend-otp      — Resend verification OTP
+ *   POST /login           — Authenticate and return JWT
+ *   POST /forgot-password — Send password reset link
+ *   POST /reset-password  — Reset password via token
+ *   PUT  /profile         — Update name/password (authed)
+ *
+ * All input is validated with Zod schemas before processing.
+ * Passwords require 8+ chars, one uppercase, one special character.
+ */
+
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import User from '../models/User';
-import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../email';
 import { createDemoWorkspaceForUser } from './workspaces';
+import authMiddleware, { AuthRequest } from '../middleware';
 
 const router = Router();
 
-// --- Schemas ---
+// ─── Validation Schemas ───────────────────────────────────────────────────────
+
 const passwordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters')
@@ -44,21 +62,31 @@ const resendOtpSchema = z.object({
   email: z.string().email('Invalid email'),
 });
 
-// --- Helpers ---
+const updateProfileSchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  password: passwordSchema.optional(),
+});
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Sign a JWT with the user's ID (expires in 7 days). */
 function generateToken(userId: string): string {
   const secret = process.env.JWT_SECRET || 'change_me_to_a_strong_secret';
   return jwt.sign({ id: userId }, secret, { expiresIn: '7d' });
 }
 
+/** Generate a random 6-digit numeric OTP. */
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+/** Generate a cryptographically random hex token for password resets. */
 function generateResetToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-// --- POST /api/auth/signup ---
+// ─── POST /signup ─────────────────────────────────────────────────────────────
+
 router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = signupSchema.safeParse(req.body);
@@ -102,7 +130,8 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// --- POST /api/auth/verify-email ---
+// ─── POST /verify-email ───────────────────────────────────────────────────────
+
 router.post('/verify-email', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = verifyEmailSchema.safeParse(req.body);
@@ -158,7 +187,8 @@ router.post('/verify-email', async (req: Request, res: Response): Promise<void> 
   }
 });
 
-// --- POST /api/auth/resend-otp ---
+// ─── POST /resend-otp ─────────────────────────────────────────────────────────
+
 router.post('/resend-otp', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = resendOtpSchema.safeParse(req.body);
@@ -198,7 +228,8 @@ router.post('/resend-otp', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// --- POST /api/auth/login ---
+// ─── POST /login ──────────────────────────────────────────────────────────────
+
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = loginSchema.safeParse(req.body);
@@ -237,7 +268,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// --- POST /api/auth/forgot-password ---
+// ─── POST /forgot-password ───────────────────────────────────────────────────
+
 router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = forgotPasswordSchema.safeParse(req.body);
@@ -272,7 +304,8 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   }
 });
 
-// --- POST /api/auth/reset-password ---
+// ─── POST /reset-password ─────────────────────────────────────────────────────
+
 router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = resetPasswordSchema.safeParse(req.body);
@@ -300,6 +333,43 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
 
     res.status(200).json({ message: 'Password reset successfully. You can now log in.' });
   } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── PUT /profile (authed) ────────────────────────────────────────────────────
+
+router.put('/profile', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const parsed = updateProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: 'Validation error', errors: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    const { name, password } = parsed.data;
+    const user = await User.findById(req.user!.id);
+
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    if (name) user.name = name;
+    if (password) user.password = password; // Pre-save hook will hash it
+
+    await user.save();
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      }
+    });
+  } catch (err) {
+    console.error('Update profile error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });

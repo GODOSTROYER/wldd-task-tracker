@@ -1,3 +1,15 @@
+/**
+ * @file models/User.ts — Mongoose User schema and model
+ *
+ * Defines the IUser interface and UserSchema with email/password auth,
+ * OTP-based email verification, and token-based password reset.
+ *
+ * Key behaviors:
+ *   - Pre-save hook auto-hashes passwords with bcrypt (10 salt rounds)
+ *   - comparePassword() method for login credential validation
+ *
+ * Exports: User model, IUser interface
+ */
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcrypt';
 

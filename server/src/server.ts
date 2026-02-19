@@ -1,9 +1,16 @@
+/**
+ * @file server.ts — Application entry point
+ *
+ * Loads environment variables, connects to MongoDB and Redis,
+ * then starts the Express server on the configured PORT (default: 5000).
+ */
+
 import dotenv from 'dotenv';
 dotenv.config();
 
 import app from './app';
-import connectDB from './config/db';
-import redis from './config/redis';
+import { connectDB } from './config';
+import redis from './config';
 
 const PORT = process.env.PORT || 5000;
 

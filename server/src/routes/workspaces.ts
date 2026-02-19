@@ -1,17 +1,38 @@
+/**
+ * @file routes/workspaces.ts — Workspace management API
+ *
+ * All routes require JWT authentication (via authMiddleware).
+ * Workspaces support an owner + members model for future collaboration.
+ *
+ * Endpoints:
+ *   GET    /       — List workspaces the user owns or is a member of
+ *   POST   /       — Create a new workspace
+ *   POST   /demo   — Create the "Hire Arnav" demo workspace with sample tasks
+ *   GET    /:id    — Get a single workspace by ID
+ *   PUT    /:id    — Rename a workspace (owner only)
+ *   DELETE /:id    — Delete a workspace and all its tasks (owner only)
+ *
+ * Exports:
+ *   createDemoWorkspaceForUser(userId) — Used by auth.ts on email verification
+ */
+
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import Workspace from '../models/Workspace';
 import Task from '../models/Task';
-import authMiddleware, { AuthRequest } from '../middleware/auth';
+import authMiddleware, { AuthRequest } from '../middleware';
 
 const router = Router();
 router.use(authMiddleware);
+
+// ─── Validation ───────────────────────────────────────────────────────────────
 
 const createWorkspaceSchema = z.object({
   name: z.string().min(1, 'Name is required'),
 });
 
-// GET /api/workspaces - List user's workspaces
+// ─── GET / — List workspaces ──────────────────────────────────────────────────
+
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -25,7 +46,8 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// POST /api/workspaces - Create new workspace
+// ─── POST / — Create workspace ────────────────────────────────────────────────
+
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const parsed = createWorkspaceSchema.safeParse(req.body);
@@ -40,7 +62,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const workspace = await Workspace.create({
       name,
       owner: userId,
-      members: [userId], // Owner is implicitly a member
+      members: [userId],
     });
 
     res.status(201).json(workspace);
@@ -49,7 +71,12 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// --- Reusable demo workspace creator ---
+// ─── Demo Workspace Creator ───────────────────────────────────────────────────
+
+/**
+ * Create the "Hire Arnav" demo workspace with 12 pre-populated tasks.
+ * Called automatically when a new user verifies their email.
+ */
 export async function createDemoWorkspaceForUser(userId: string) {
   const workspace = await Workspace.create({
     name: '🚀 Why You Should Hire Arnav',
@@ -61,7 +88,7 @@ export async function createDemoWorkspaceForUser(userId: string) {
   const day = 86400000;
 
   const tasks = [
-    // === TO DO (3) ===
+    // ── To Do (3) ──
     {
       title: "📄 Read Arnav's Resume (You Won't Regret It)",
       status: 'todo',
@@ -87,7 +114,7 @@ export async function createDemoWorkspaceForUser(userId: string) {
       dueDate: new Date(now + day * 4),
     },
 
-    // === IN PROGRESS (3) ===
+    // ── In Progress (3) ──
     {
       title: "✍️ Drafting the 'You're Hired' Email",
       status: 'in-progress',
@@ -113,7 +140,7 @@ export async function createDemoWorkspaceForUser(userId: string) {
       dueDate: new Date(now + day * 3),
     },
 
-    // === IN REVIEW (3) ===
+    // ── In Review (3) ──
     {
       title: '✅ Evaluating Full-Stack Skills: Node, React, Next.js',
       status: 'in-review',
@@ -139,7 +166,7 @@ export async function createDemoWorkspaceForUser(userId: string) {
       dueDate: new Date(now + day * 7),
     },
 
-    // === COMPLETED (3) ===
+    // ── Completed (3) ──
     {
       title: '🔥 Built This Entire Task Tracker App',
       status: 'completed',
@@ -174,7 +201,8 @@ export async function createDemoWorkspaceForUser(userId: string) {
   return workspace;
 }
 
-// POST /api/workspaces/demo - Create demo workspace with sample tasks
+// ─── POST /demo — Create demo workspace ───────────────────────────────────────
+
 router.post('/demo', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -185,7 +213,8 @@ router.post('/demo', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// GET /api/workspaces/:id - Get single workspace (for title etc)
+// ─── GET /:id — Get single workspace ──────────────────────────────────────────
+
 router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -205,7 +234,8 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// PUT /api/workspaces/:id - Update workspace
+// ─── PUT /:id — Rename workspace (owner only) ────────────────────────────────
+
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const parsed = createWorkspaceSchema.safeParse(req.body);
@@ -217,7 +247,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user!.id;
     const workspace = await Workspace.findOne({
       _id: req.params.id,
-      owner: userId, // Only owner can rename? Let's say yes for now.
+      owner: userId,
     });
 
     if (!workspace) {
@@ -234,7 +264,8 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   }
 });
 
-// DELETE /api/workspaces/:id - Delete workspace and tasks
+// ─── DELETE /:id — Delete workspace and all tasks (owner only) ────────────────
+
 router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
@@ -248,10 +279,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
       return;
     }
 
-    // Delete workspace
     await workspace.deleteOne();
-
-    // Delete all associated tasks
     await Task.deleteMany({ workspaceId: workspace._id });
 
     res.status(200).json({ message: 'Workspace deleted' });

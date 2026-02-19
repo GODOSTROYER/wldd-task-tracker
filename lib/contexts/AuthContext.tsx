@@ -7,11 +7,9 @@ import { useRouter } from 'next/navigation';
 interface AuthContextType {
   isSignedIn: boolean;
   isLoaded: boolean;
-  user: {
-    firstName: string | null;
-    emailAddresses: { emailAddress: string }[];
-  } | null;
+  user: User | null;
   signOut: () => void;
+  login: (token: string, user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -19,6 +17,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoaded: false,
   user: null,
   signOut: () => {},
+  login: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -54,20 +53,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/');
   };
 
-  const user = userData
-    ? {
-        firstName: userData.name,
-        emailAddresses: [{ emailAddress: userData.email }],
-      }
-    : null;
+  const login = (token: string, user: User) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    setUserData(user);
+    router.push('/workspaces');
+  };
 
   return (
     <AuthContext.Provider
       value={{
         isSignedIn: !!userData,
         isLoaded,
-        user,
+        user: userData,
         signOut,
+        login,
       }}
     >
       {children}

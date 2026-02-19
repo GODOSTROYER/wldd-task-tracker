@@ -185,10 +185,13 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-3 border-t border-gray-100 space-y-0.5">
-        <button className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors text-left">
-          <Settings className="h-4 w-4 text-gray-400 shrink-0" />
+        <Link href="/settings" className={cn(
+          "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left",
+          pathname === "/settings" ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+        )}>
+          <Settings className={cn("h-4 w-4 shrink-0", pathname === "/settings" ? "text-blue-500" : "text-gray-400")} />
           Settings
-        </button>
+        </Link>
         <button
           onClick={signOut}
           className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors text-left"
