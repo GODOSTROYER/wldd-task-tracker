@@ -90,7 +90,7 @@ export default function HomePage() {
         <div className="max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm font-medium mb-8">
             <Sparkles className="h-4 w-4" />
-            WLDD Full-Stack Developer Assignment — Bangalore
+            WLDD Full-Stack Developer Assignment
           </div>
 
           <h1 className="text-5xl md:text-7xl font-extrabold leading-[1.1] mb-6 tracking-tight">
