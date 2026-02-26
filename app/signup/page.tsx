@@ -8,10 +8,7 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight } from 'lucide-react';
 
 export default function SignupPage() {
@@ -28,11 +25,10 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const data = await api<{ message: string; email: string }>('/api/auth/signup', {
+      await api<{ message: string; email: string }>('/api/auth/signup', {
         method: 'POST',
         body: { name, email, password },
       });
-      console.log('Registration successful:', data);
       router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Registration failed';

@@ -18,7 +18,7 @@
 
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import Workspace from '../models/Workspace';
+import Workspace, { IWorkspace } from '../models/Workspace';
 import Task from '../models/Task';
 import authMiddleware, { AuthRequest } from '../middleware';
 
@@ -42,6 +42,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     res.status(200).json(workspaces);
   } catch (err) {
+    console.error('GET /api/workspaces error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -67,6 +68,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     res.status(201).json(workspace);
   } catch (err) {
+    console.error('POST /api/workspaces error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -77,7 +79,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
  * Create the "Hire Arnav" demo workspace with 12 pre-populated tasks.
  * Called automatically when a new user verifies their email.
  */
-export async function createDemoWorkspaceForUser(userId: string) {
+export async function createDemoWorkspaceForUser(userId: string): Promise<IWorkspace> {
   const workspace = await Workspace.create({
     name: '🚀 Why You Should Hire Arnav',
     owner: userId,
@@ -230,6 +232,7 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 
     res.status(200).json(workspace);
   } catch (err) {
+    console.error('GET /api/workspaces/:id error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });

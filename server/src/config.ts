@@ -17,8 +17,28 @@ import Redis from 'ioredis';
 /** Connect to MongoDB using the MONGO_URI env var (falls back to localhost). */
 export async function connectDB(): Promise<void> {
   const uri = process.env.MONGO_URI || 'mongodb://localhost:27017/mini-task-tracker';
-  await mongoose.connect(uri);
-  console.log('MongoDB connected');
+  try {
+    await mongoose.connect(uri);
+    console.log('MongoDB connected');
+  } catch (error: unknown) {
+    const isAtlasWhitelistError =
+      error instanceof Error &&
+      error.name === 'MongooseServerSelectionError' &&
+      uri.includes('mongodb.net');
+
+    if (isAtlasWhitelistError) {
+      console.error('\n================================================================');
+      console.error('🚨 MONGODB CONNECTION ERROR: IP NOT WHITELISTED 🚨');
+      console.error('Atlas blocked the connection. This usually means your current');
+      console.error('internet IP address is not on the Atlas Network Access whitelist.');
+      console.error('Go to: https://www.mongodb.com/docs/atlas/security-whitelist/');
+      console.error('================================================================\n');
+    } else {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('MongoDB connection error:', message);
+    }
+    throw error;
+  }
 }
 
 // ─── Redis ────────────────────────────────────────────────────────────────────

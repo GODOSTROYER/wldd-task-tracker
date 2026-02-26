@@ -1,23 +1,16 @@
 "use client";
 
-// import { useUser } from "@/lib/contexts/AuthContext";
 import { Sidebar } from "@/components/sidebar";
 import { usePathname } from "next/navigation";
 
+const AUTH_PATHS = ["/login", "/register", "/signup", "/", "/forgot-password", "/reset-password", "/verify-email"];
+
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  
-  // Don't show sidebar on login/register pages
-  // Also wait for auth check? For now assuming if signed in, show layout.
-  // Don't show sidebar on login/register/landing pages
-  const isAuthPage = pathname === "/login" || pathname === "/register" || pathname === "/signup" || pathname === "/";
 
-  if (isAuthPage) {
+  if (AUTH_PATHS.includes(pathname)) {
     return <>{children}</>;
   }
-
-  // Always show layout for app pages. Auth protection is handled by the pages themselves or middleware.
-  // This prevents the sidebar from disappearing during initial load or if auth is slightly delayed.
 
   return (
     <div className="flex h-screen bg-[#F8F9FD] overflow-hidden">

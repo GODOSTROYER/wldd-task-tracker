@@ -65,12 +65,12 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       }
     }
 
-    const query: any = { owner: userId };
+    const filter: { owner: string; workspaceId?: string } = { owner: userId };
     if (workspaceId) {
-      query.workspaceId = workspaceId;
+      filter.workspaceId = workspaceId as string;
     }
 
-    const tasks = await Task.find(query).sort({ position: 1, createdAt: -1 });
+    const tasks = await Task.find(filter).sort({ position: 1, createdAt: -1 });
 
     // Cache the result when no workspace filter is applied
     if (!workspaceId) {
@@ -79,6 +79,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     res.status(200).json(tasks);
   } catch (err) {
+    console.error('GET /api/tasks error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -152,6 +153,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 
     res.status(201).json(task);
   } catch (err) {
+    console.error('POST /api/tasks error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -180,6 +182,7 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 
     res.status(200).json(task);
   } catch (err) {
+    console.error('PUT /api/tasks/:id error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -201,6 +204,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
 
     res.status(200).json({ message: 'Task deleted' });
   } catch (err) {
+    console.error('DELETE /api/tasks/:id error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });

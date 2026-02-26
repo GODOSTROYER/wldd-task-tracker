@@ -10,7 +10,7 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
-import { ArrowLeft, Mail, Trello } from 'lucide-react';
+import { ArrowLeft, Mail, Layout } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -41,8 +41,10 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
-            <Trello className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">TrelloClone</span>
+            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+              <Layout className="h-5 w-5" />
+            </div>
+            <span className="text-2xl font-bold text-gray-900">Task Tracker</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Forgot Password</h1>
           <p className="text-gray-600">

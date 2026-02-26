@@ -7,12 +7,13 @@ import {
   Settings,
   LayoutGrid,
   Layout,
+  MoreHorizontal,
   Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@/lib/contexts/AuthContext";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { api, getToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,7 +90,7 @@ export function Sidebar() {
       fetchWorkspaces();
       window.dispatchEvent(new Event("workspace-updated"));
     } catch (err) {
-      console.error("Rename failed", err);
+      console.error("Rename failed");
     }
   };
 

@@ -18,27 +18,22 @@ import workspaceRoutes from './routes/workspaces';
 
 const app = express();
 
-// Middleware
 app.use(morgan('dev'));
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
-if (process.env.NODE_ENV !== 'test') {
-  app.use(rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: 'Too many requests from this IP, please try again later.',
-  }));
-}
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests from this IP, please try again later.',
+}));
 
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 
-// Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });

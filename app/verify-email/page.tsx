@@ -8,7 +8,7 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
-import { Trello, Mail, RefreshCw } from 'lucide-react';
+import { Layout, Mail, RefreshCw } from 'lucide-react';
 
 function VerifyEmailContent() {
   const router = useRouter();
@@ -105,8 +105,10 @@ function VerifyEmailContent() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
-            <Trello className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">TrelloClone</span>
+            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+              <Layout className="h-5 w-5" />
+            </div>
+            <span className="text-2xl font-bold text-gray-900">Task Tracker</span>
           </div>
           <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
             <Mail className="h-8 w-8 text-blue-600" />

@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
 import request from 'supertest';
 import app from '../app';
 import User from '../models/User';
@@ -70,7 +69,7 @@ describe('Redis Caching', () => {
     await request(app)
       .post('/api/tasks')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'New Task', workspaceId });
+      .send({ title: 'New Task' });
 
     // GET should return fresh data (including the new task)
     const res = await request(app)
@@ -85,7 +84,7 @@ describe('Redis Caching', () => {
     const createRes = await request(app)
       .post('/api/tasks')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Before Update', workspaceId });
+      .send({ title: 'Before Update' });
     const taskId = createRes.body._id;
 
     await request(app)
@@ -110,7 +109,7 @@ describe('Redis Caching', () => {
     const createRes = await request(app)
       .post('/api/tasks')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'To Be Deleted', workspaceId });
+      .send({ title: 'To Be Deleted' });
     const taskId = createRes.body._id;
 
     await request(app)

@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from 'react';
 import { PasswordRequirements, isPasswordValid } from '@/components/password-requirements';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -12,10 +12,10 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
-import { ArrowRight, CheckCircle2, Trello } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Layout } from 'lucide-react';
 
 function ResetPasswordContent() {
-  // const router = useRouter();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token') || '';
   const [password, setPassword] = useState('');
@@ -58,8 +58,10 @@ function ResetPasswordContent() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-2 mb-4">
-            <Trello className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">TrelloClone</span>
+            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+              <Layout className="h-5 w-5" />
+            </div>
+            <span className="text-2xl font-bold text-gray-900">Task Tracker</span>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             {success ? 'Password Reset!' : 'Set New Password'}

@@ -24,7 +24,7 @@ export interface AuthRequest extends Request {
 }
 
 /** Verify JWT Bearer token and attach `req.user`. Returns 401 on failure. */
-const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction): void => {
+function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
 
   if (!header || !header.startsWith('Bearer ')) {
@@ -42,7 +42,7 @@ const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction): vo
   } catch {
     res.status(401).json({ message: 'Invalid or expired token' });
   }
-};
+}
 
 export default authMiddleware;
 

@@ -6,10 +6,10 @@ import { updateProfile } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, User as UserIcon, Lock, CheckCircle2 } from "lucide-react";
+import { Loader2, Save, User as UserIcon, Lock, CheckCircle2 } from "lucide-react";
 
 export default function SettingsPage() {
-  const { user } = useUser();
+  const { user, login } = useUser();
   const [name, setName] = useState(user?.name || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -34,38 +34,21 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      await updateProfile({
+      const res = await updateProfile({
         name: name !== user?.name ? name : undefined,
         password: password || undefined,
       });
 
-      // Update context/local storage user
-      // We need to re-login essentially to update user in context?
-      // Or just update user object?
-      // AuthContext likely has setUser?
-      // Assuming 'login' function can be used to set user if we pass token and user?
-      // Or we can just manual update if AuthContext exposes setUser.
-      // Let's reload page for simplicity or just show success.
-      
-      // Update local storage user
-      // localStorage.setItem("user", JSON.stringify(res.user));
-       // But context won't update automatically unless we trigger it.
-       // We can trigger a window reload or just show success.
-       // Ideally we update context.
-       
        setSuccess(true);
        setPassword("");
        setConfirmPassword("");
-       
-       // Force reload to update context if we can't update it directly
+
+       // Force reload to update auth context with new name
        setTimeout(() => window.location.reload(), 1000);
 
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to update profile");
-      }
+      const message = err instanceof Error ? err.message : "Failed to update profile";
+      setError(message);
     } finally {
       setLoading(false);
     }

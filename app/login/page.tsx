@@ -7,10 +7,7 @@ import { api, setToken, type AuthResponse } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
@@ -30,13 +27,11 @@ export default function LoginPage() {
         method: 'POST',
         body: { email, password },
       });
-      console.log('Login successful:', data);
       setToken(data.token, data.user);
       router.push('/workspaces');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
       if (message.includes('verify your email')) {
-        // Redirect to verify-email page
         router.push(`/verify-email?email=${encodeURIComponent(email)}`);
         return;
       }

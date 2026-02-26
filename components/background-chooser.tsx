@@ -50,6 +50,7 @@ interface Props {
 }
 
 export function BackgroundChooser({ currentBg, onSelect }: Props) {
+  const current = backgrounds.find((b) => b.id === currentBg) || backgrounds[0];
 
   return (
     <DropdownMenu>
