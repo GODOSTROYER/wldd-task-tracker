@@ -28,8 +28,12 @@ interface Props {
 export default function Navbar({ children }: Props) {
   const { isSignedIn, user, signOut } = useUser();
   const pathname = usePathname();
+  const currentPath = pathname ?? "";
 
-  const isAppPage = pathname === "/dashboard" || pathname === "/tasks" || pathname.startsWith("/workspaces");
+  const isAppPage =
+    currentPath === "/dashboard" ||
+    currentPath === "/tasks" ||
+    currentPath.startsWith("/workspaces");
 
   const userInitials = user?.name
     ? user.name.slice(0, 2).toUpperCase()
