@@ -2,6 +2,9 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import app from '../../server/src/app';
 import { ensureConnections } from '../../server/src/config';
 
+type NextHandler = (req: NextApiRequest, res: NextApiResponse, next: (err?: unknown) => void) => void;
+const expressHandler = app as unknown as NextHandler;
+
 function makeRequestId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -28,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await ensureConnections();
     console.info(`[api-bridge:${requestId}] Dispatching request to Express app`);
     await new Promise<void>((resolve, reject) => {
-      app(req, res, (err?: unknown) => {
+      expressHandler(req, res, (err?: unknown) => {
         if (err) reject(err);
         else resolve();
       });
