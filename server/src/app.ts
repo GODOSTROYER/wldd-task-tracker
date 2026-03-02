@@ -41,4 +41,9 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.use('/api', (req, res) => {
+  console.warn(`[api] Unmatched route: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ message: 'Route not found' });
+});
+
 export default app;

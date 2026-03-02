@@ -25,6 +25,18 @@ import authMiddleware, { AuthRequest } from '../middleware';
 
 const router = Router();
 
+function maskEmail(email: string): string {
+  const [local, domain = ''] = email.split('@');
+  if (!local) return email;
+  const visible = local.slice(0, 2);
+  return `${visible}***@${domain}`;
+}
+
+function authLog(step: string, details?: Record<string, unknown>): void {
+  const suffix = details ? ` ${JSON.stringify(details)}` : '';
+  console.info(`[auth] ${step}${suffix}`);
+}
+
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
 const passwordSchema = z
@@ -89,16 +101,20 @@ function generateResetToken(): string {
 
 router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   try {
+    authLog('signup:start');
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) {
+      authLog('signup:validation_failed', { errors: parsed.error.flatten().fieldErrors });
       res.status(400).json({ message: 'Validation error', errors: parsed.error.flatten().fieldErrors });
       return;
     }
 
     const { name, email, password } = parsed.data;
 
+    authLog('signup:validation_ok', { email: maskEmail(email) });
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      authLog('signup:email_conflict', { email: maskEmail(email) });
       res.status(409).json({ message: 'Email already in use' });
       return;
     }
@@ -113,10 +129,12 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       verificationOtp: otp,
       verificationOtpExpiry: otpExpiry,
     });
+    authLog('signup:user_created', { email: maskEmail(email) });
 
     // Send verification email (don't block on failure)
     try {
       await sendVerificationEmail(email, otp);
+      authLog('signup:otp_sent', { email: maskEmail(email) });
     } catch (emailErr) {
       console.error('Failed to send verification email:', emailErr);
     }
@@ -126,6 +144,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       email,
     });
   } catch (err) {
+    console.error('[auth] signup:unexpected_error', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -232,38 +251,46 @@ router.post('/resend-otp', async (req: Request, res: Response): Promise<void> =>
 
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
+    authLog('login:start');
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
+      authLog('login:validation_failed', { errors: parsed.error.flatten().fieldErrors });
       res.status(400).json({ message: 'Validation error', errors: parsed.error.flatten().fieldErrors });
       return;
     }
 
     const { email, password } = parsed.data;
+    authLog('login:validation_ok', { email: maskEmail(email) });
 
     const user = await User.findOne({ email });
     if (!user) {
+      authLog('login:user_not_found', { email: maskEmail(email) });
       res.status(401).json({ message: 'Invalid credentials' });
       return;
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      authLog('login:password_mismatch', { email: maskEmail(email) });
       res.status(401).json({ message: 'Invalid credentials' });
       return;
     }
 
     if (!user.isVerified) {
+      authLog('login:user_not_verified', { email: maskEmail(email) });
       res.status(403).json({ message: 'Please verify your email before logging in', email: user.email });
       return;
     }
 
     const token = generateToken(user._id.toString());
+    authLog('login:success', { userId: user._id.toString(), email: maskEmail(email) });
 
     res.status(200).json({
       token,
       user: { id: user._id, name: user.name, email: user.email },
     });
   } catch (err) {
+    console.error('[auth] login:unexpected_error', err);
     res.status(500).json({ message: 'Server error' });
   }
 });

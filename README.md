@@ -155,6 +155,12 @@ If `/api/auth/login` returns `405 Method Not Allowed` on Vercel:
 2. Redeploy after pulling latest changes.
 3. Confirm you are deploying the intended branch/commit in Vercel.
 
+For deeper debugging, open Vercel runtime logs and search for:
+
+- `[api-bridge:` entries from `pages/api/[...path].ts` (confirms whether Vercel routed the request into Express)
+- `[auth] login:*` / `[auth] signup:*` entries from `server/src/routes/auth.ts` (confirms where auth flow failed)
+- `[api] Unmatched route:` entries from `server/src/app.ts` (confirms bad route path reaching Express)
+
 ## API Endpoints
 
 ### Auth
