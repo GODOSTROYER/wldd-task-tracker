@@ -19,7 +19,10 @@ import workspaceRoutes from './routes/workspaces';
 const app = express();
 
 app.use(morgan('dev'));
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : true,
+  credentials: true,
+}));
 app.use(express.json());
 app.use(helmet());
 app.use(rateLimit({
@@ -36,6 +39,11 @@ app.use('/api/workspaces', workspaceRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.use('/api', (req, res) => {
+  console.warn(`[api] Unmatched route: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ message: 'Route not found' });
 });
 
 export default app;

@@ -110,7 +110,58 @@ The frontend starts at `http://localhost:3000`.
 
 | Variable                   | Description     | Example                 |
 | -------------------------- | --------------- | ----------------------- |
-| `NEXT_PUBLIC_API_BASE_URL` | Backend API URL | `http://localhost:5000` |
+| `NEXT_PUBLIC_API_BASE_URL` | Optional backend URL override (local split frontend/backend dev) | `http://localhost:5000` |
+
+## Deploy on Vercel (Single Project)
+
+This repo is configured for a single Vercel deployment:
+
+- Next.js frontend is deployed from the repository root.
+- Express backend is exposed through `pages/api/[...path].ts` (Next.js API catch-all).
+
+### Steps
+
+1. Import this repository into Vercel as one project (root directory `.`).
+2. Add the backend environment variables in Vercel project settings:
+   - `MONGO_URI`, `REDIS_URL`, `JWT_SECRET`
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
+   - `FROM_EMAIL`, `FROM_NAME`
+   - `FRONTEND_URL` (set this to your Vercel app URL)
+3. (Optional) Set `NEXT_PUBLIC_API_BASE_URL` only if you want a custom API base URL. For single deployment, leave it unset.
+4. Deploy. The frontend and API will both be served from the same Vercel project.
+
+### Production readiness checklist (important)
+
+Before deploying to Vercel, verify these production requirements:
+
+- `MONGO_URI` must point to a hosted MongoDB instance (for example, MongoDB Atlas). `mongodb://localhost:27017/...` will not work on Vercel.
+- `REDIS_URL` must point to a hosted Redis instance (for example, Upstash or Redis Cloud). `redis://localhost:6379` will not work on Vercel.
+- `FRONTEND_URL` must be your Vercel production URL (for example, `https://your-app.vercel.app`) because CORS is restricted to this value when set.
+- `NEXT_PUBLIC_API_BASE_URL` should usually be left unset for single-project deployment so the frontend uses same-origin `/api/*` routes.
+- `PORT` is not required on Vercel serverless functions.
+- Rotate all secrets immediately if they were shared publicly (`JWT_SECRET`, SMTP credentials, DB credentials).
+
+### Troubleshooting: app tries to call `http://localhost:5000` in production
+
+If login/signup fails in production with `ERR_CONNECTION_REFUSED` and the browser shows requests to `http://localhost:5000/api/...`, check:
+
+1. Vercel project **Environment Variables** for `NEXT_PUBLIC_API_BASE_URL`.
+2. Remove it (recommended for single-project deploy), or set it to your deployed origin.
+3. Redeploy after updating env vars.
+
+For this repo's single-project setup, frontend requests should go to same-origin `/api/*`.
+
+If `/api/auth/login` returns `405 Method Not Allowed` on Vercel:
+
+1. Make sure the deployment contains `pages/api/[...path].ts`.
+2. Redeploy after pulling latest changes.
+3. Confirm you are deploying the intended branch/commit in Vercel.
+
+For deeper debugging, open Vercel runtime logs and search for:
+
+- `[api-bridge:` entries from `pages/api/[...path].ts` (confirms whether Vercel routed the request into Express)
+- `[auth] login:*` / `[auth] signup:*` entries from `server/src/routes/auth.ts` (confirms where auth flow failed)
+- `[api] Unmatched route:` entries from `server/src/app.ts` (confirms bad route path reaching Express)
 
 ## API Endpoints
 
