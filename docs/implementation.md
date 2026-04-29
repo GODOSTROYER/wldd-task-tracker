@@ -27,10 +27,10 @@ UI state changes (like task toggling or creation) are implemented optimistically
 - **Express + TypeScript**: A robust API layer located within the `server/src` directory, typed heavily for developer confidence.
 - **Zod Validation**: Payload validation is placed at the route boundary ensuring only strictly typed and validated data reaches the database controllers.
 
-### Caching Strategy
+### Data Layer
 
-- **Redis (`ioredis`)**: Used primarily to cache `GET /api/tasks` responses.
-- Validation relies on cache invalidation upon any mutation (POST, PUT, DELETE) affecting a user's tasks. This ensures immediate consistency for the user while reducing database load on repeated reads.
+- **Neon PostgreSQL + Sequelize**: Users, workspaces, and tasks are persisted in Postgres with Sequelize models and ownership indexes.
+- **Serverless boot**: The Express app performs an idempotent database initialization before API routes, so local `server.ts` and Vercel Functions share the same app instance safely.
 
 ### Security
 
@@ -51,6 +51,6 @@ Routing is modularized by entity:
 
 Tests are executed utilizing the Jest framework combined with Supertest for API integration testing.
 
-- **`mongodb-memory-server`**: Used to spin up an ephemeral MongoDB instance during the test lifecycle, removing external database dependencies.
-- **`ioredis-mock`**: Subbed in for an actual Redis server to validate caching logic predictably.
+- **Postgres test database**: Tests use `DATABASE_URL_TEST` when provided, falling back to `DATABASE_URL`.
+- **Nodemailer mock**: Email delivery is mocked so OTP and password reset flows can be tested without sending real mail.
 - Target coverage is defined at ≥ 70% across all vital metrics (statements, branches, functions, lines).

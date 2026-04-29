@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 
 interface Workspace {
-  _id: string;
+  id: string;
   name: string;
 }
 
@@ -62,7 +62,7 @@ export function Sidebar() {
     const token = getToken();
     if (!token || !newWorkspaceName.trim()) return;
     try {
-      const ws = await api<{ _id: string }>("/api/workspaces", {
+      const ws = await api<{ id: string }>("/api/workspaces", {
         method: "POST",
         token,
         body: { name: newWorkspaceName },
@@ -70,7 +70,7 @@ export function Sidebar() {
       setNewWorkspaceName("");
       setShowCreateDialog(false);
       fetchWorkspaces();
-      router.push(`/workspaces/${ws._id}`);
+      router.push(`/workspaces/${ws.id}`);
     } catch (err) {
       console.error(err);
     }
@@ -80,7 +80,7 @@ export function Sidebar() {
     const token = getToken();
     if (!token || !editingWorkspace || !renameName.trim()) return;
     try {
-      await api(`/api/workspaces/${editingWorkspace._id}`, {
+      await api(`/api/workspaces/${editingWorkspace.id}`, {
         method: "PUT",
         token,
         body: { name: renameName },
@@ -146,11 +146,11 @@ export function Sidebar() {
           </div>
 
           {workspaces.map((ws) => {
-            const isActive = pathname === `/workspaces/${ws._id}`;
+            const isActive = pathname === `/workspaces/${ws.id}`;
             return (
-              <div key={ws._id} className="relative group/ws">
+              <div key={ws.id} className="relative group/ws">
                 <Link
-                  href={`/workspaces/${ws._id}`}
+                  href={`/workspaces/${ws.id}`}
                   className={cn(
                     "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all pr-9",
                     isActive

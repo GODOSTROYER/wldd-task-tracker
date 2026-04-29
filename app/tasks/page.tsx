@@ -377,7 +377,7 @@ function TaskCard({ task, onEdit }: { task: Task; onEdit?: () => void }) {
 }
 
 function SortableTask({ task, onEdit }: { task: Task; onEdit: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task._id, data: { task } });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, data: { task } });
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }} {...attributes} {...listeners}>
       <TaskCard task={task} onEdit={onEdit} />
@@ -400,8 +400,8 @@ function TaskColumn({ col, tasks, onAddTask, onEditTask }: { col: typeof COLUMNS
         </button>
       </div>
       <div ref={setNodeRef} className="flex-1 flex flex-col gap-3 min-h-[140px] p-2 rounded-2xl border-2 border-dashed border-transparent bg-gray-50/40 hover:border-gray-200 hover:bg-gray-50 transition-all">
-        <SortableContext id={col.id} items={tasks.map(t => t._id)} strategy={verticalListSortingStrategy}>
-          {tasks.map(task => <SortableTask key={task._id} task={task} onEdit={() => onEditTask(task)} />)}
+        <SortableContext id={col.id} items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+          {tasks.map(task => <SortableTask key={task.id} task={task} onEdit={() => onEditTask(task)} />)}
         </SortableContext>
         {tasks.length === 0 && <div className="flex-1 flex items-center justify-center text-gray-300 text-xs font-medium select-none">Drop here</div>}
       </div>
@@ -455,7 +455,7 @@ function ListView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask:
                     const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
                     return (
                       <div
-                        key={task._id}
+                        key={task.id}
                         className="group flex items-center gap-4 px-5 py-3.5 hover:bg-blue-50/40 transition-colors cursor-pointer"
                         onClick={() => onEditTask(task)}
                       >
@@ -572,7 +572,7 @@ function TableView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditTask
                 const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
                 return (
                   <tr
-                    key={task._id}
+                    key={task.id}
                     className="group hover:bg-blue-50/30 transition-colors cursor-pointer"
                     onClick={() => onEditTask(task)}
                   >
@@ -728,7 +728,7 @@ function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditT
                 const duePct = dayPct(new Date(task.dueDate!));
                 const isOverdue = new Date(task.dueDate!) < today && task.status !== "completed";
                 return (
-                  <div key={task._id} className="group flex items-center hover:bg-blue-50/30 transition-colors" style={{ minHeight: "48px" }}>
+                  <div key={task.id} className="group flex items-center hover:bg-blue-50/30 transition-colors" style={{ minHeight: "48px" }}>
                     {/* Task label */}
                     <div
                       className="w-[200px] shrink-0 px-4 flex items-center gap-2 min-w-0 cursor-pointer hover:text-blue-600 transition-colors"
@@ -791,7 +791,7 @@ function TimelineView({ tasks, onEditTask, onAddTask }: { tasks: Task[]; onEditT
           </div>
           <div className="divide-y divide-gray-50">
             {undatedTasks.map(task => (
-              <div key={task._id} className="group flex items-center gap-3 px-5 py-3 hover:bg-blue-50/30 transition-colors cursor-pointer" onClick={() => onEditTask(task)}>
+              <div key={task.id} className="group flex items-center gap-3 px-5 py-3 hover:bg-blue-50/30 transition-colors cursor-pointer" onClick={() => onEditTask(task)}>
                 <div className="shrink-0"><TaskStatusIcon status={task.status} dueDate={task.dueDate} /></div>
                 <span className="text-sm font-medium text-gray-700 flex-1 truncate">{task.title}</span>
                 <StatusBadge status={task.status} />
@@ -859,31 +859,31 @@ export default function TasksPage({ workspaceId }: TasksPageProps) {
 
   // DnD handlers
   const handleDragStart = ({ active }: DragStartEvent) => {
-    setActiveTask(tasks.find(t => t._id === active.id) ?? null);
+    setActiveTask(tasks.find(t => t.id === active.id) ?? null);
   };
   const handleDragOver = ({ active, over }: DragOverEvent) => {
     if (!over) return;
-    const aTask = tasks.find(t => t._id === active.id);
+    const aTask = tasks.find(t => t.id === active.id);
     if (!aTask) return;
-    const overStatus = (over.data.current?.type === "Column" ? String(over.id) : tasks.find(t => t._id === over.id)?.status) as string;
+    const overStatus = (over.data.current?.type === "Column" ? String(over.id) : tasks.find(t => t.id === over.id)?.status) as string;
     if (!overStatus || aTask.status === overStatus) return;
-    setTasks(prev => prev.map(t => t._id === active.id ? { ...t, status: overStatus as Task["status"] } : t));
+    setTasks(prev => prev.map(t => t.id === active.id ? { ...t, status: overStatus as Task["status"] } : t));
   };
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
     setActiveTask(null);
     if (!over) { saveBatchOrder(tasks); return; }
-    const aTask = tasks.find(t => t._id === active.id);
+    const aTask = tasks.find(t => t.id === active.id);
     if (!aTask) return;
     const oldStatus = aTask.status;
-    const newStatus: string = over.data.current?.type === "Column" ? String(over.id) : (tasks.find(t => t._id === over.id)?.status ?? oldStatus);
+    const newStatus: string = over.data.current?.type === "Column" ? String(over.id) : (tasks.find(t => t.id === over.id)?.status ?? oldStatus);
     setTasks(prev => {
       let next = [...prev];
-      const ai = next.findIndex(t => t._id === active.id);
-      const oi = next.findIndex(t => t._id === over.id);
+      const ai = next.findIndex(t => t.id === active.id);
+      const oi = next.findIndex(t => t.id === over.id);
       if (ai === -1) return prev;
       if (oldStatus !== newStatus) {
         next[ai] = { ...next[ai], status: newStatus as Task["status"] };
-        if (oi !== -1 && next[oi].status === newStatus) { const [m] = next.splice(ai, 1); next.splice(next.findIndex(t => t._id === over.id), 0, m); }
+        if (oi !== -1 && next[oi].status === newStatus) { const [m] = next.splice(ai, 1); next.splice(next.findIndex(t => t.id === over.id), 0, m); }
       } else if (active.id !== over.id) { next = arrayMove(next, ai, oi); }
       saveBatchOrder(next); return next;
     });
@@ -893,7 +893,7 @@ export default function TasksPage({ workspaceId }: TasksPageProps) {
     const payload = COLUMNS.flatMap(col =>
       current
         .filter(t => t.status === col.id)
-        .map((t, i) => ({ _id: t._id, status: col.id, position: (i + 1) * 1024 }))
+        .map((t, i) => ({ id: t.id, status: col.id, position: (i + 1) * 1024 }))
     );
     if (token && payload.length) {
       await api("/api/tasks/batch", { method: "PUT", token, body: { tasks: payload } }).catch(console.error);
@@ -909,13 +909,13 @@ export default function TasksPage({ workspaceId }: TasksPageProps) {
   };
   const handleUpdateTask = async (updated: Partial<Task>) => {
     if (!token || !editingTask) return;
-    const saved = await api<Task>(`/api/tasks/${editingTask._id}`, { method: "PUT", token, body: updated });
-    setTasks(prev => prev.map(t => t._id === saved._id ? saved : t));
+    const saved = await api<Task>(`/api/tasks/${editingTask.id}`, { method: "PUT", token, body: updated });
+    setTasks(prev => prev.map(t => t.id === saved.id ? saved : t));
   };
   const handleDeleteTask = async () => {
     if (!token || !editingTask) return;
-    await api(`/api/tasks/${editingTask._id}`, { method: "DELETE", token });
-    setTasks(prev => prev.filter(t => t._id !== editingTask._id));
+    await api(`/api/tasks/${editingTask.id}`, { method: "DELETE", token });
+    setTasks(prev => prev.filter(t => t.id !== editingTask.id));
   };
 
   const handleRename = async () => {

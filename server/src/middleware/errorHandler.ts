@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import { UniqueConstraintError, ValidationError } from 'sequelize';
 
 export class AppError extends Error {
   statusCode: number;
@@ -8,6 +9,13 @@ export class AppError extends Error {
 export const asyncHandler = (fn: any) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(fn(req, res, next)).catch(next);
 
 export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
+  if (err instanceof UniqueConstraintError) {
+    return res.status(409).json({ message: 'Resource already exists' });
+  }
+  if (err instanceof ValidationError) {
+    return res.status(400).json({ message: err.errors[0]?.message || 'Validation error' });
+  }
+
   const status = err?.statusCode || 500;
   res.status(status).json({ message: err.message || 'Server error' });
 }

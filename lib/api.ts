@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 interface ApiOptions {
   method?: string;
@@ -58,15 +58,14 @@ export interface User {
 }
 
 export interface Task {
-  _id: string;
+  id: string;
   title: string;
   description?: string;
   status: "todo" | "in-progress" | "in-review" | "completed";
   priority: "low" | "medium" | "high";
-  color?: string;
   position: number;
   dueDate?: string | null;
-  owner: string;
+  ownerId: string;
   workspaceId: string;
   createdAt: string;
   updatedAt?: string;
@@ -75,11 +74,13 @@ export interface Task {
 export const updateProfile = async (data: { name?: string; password?: string }) => {
   const token = getToken();
   if (!token) throw new Error("No token found");
-  return api<{ message: string; user: User }>('/api/auth/profile', {
+  const response = await api<{ message: string; user: User }>('/api/auth/profile', {
     method: 'PUT',
     token,
     body: data,
   });
+  localStorage.setItem('user', JSON.stringify(response.user));
+  return response;
 };
 
 export interface AuthResponse {

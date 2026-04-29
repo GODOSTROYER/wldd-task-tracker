@@ -1,53 +1,45 @@
 # Screening Test Requirements vs Current Project Structure
 
 ## Verdict
-The project satisfies **most product-level behavior** (auth, multi-user task isolation, task CRUD, protected routes, React + Tailwind frontend), but it does **not fully match the required backend stack and architecture constraints** from the screening brief.
+The project is aligned with the required stack and product behavior: Node.js + Express, React + Tailwind, PostgreSQL + Sequelize, bcrypt password hashing, JWT auth, protected routes, and user-scoped task ownership.
 
 ## Requirement-by-requirement comparison
 
 ### 1) Authentication system
 - **Signup/Login**: Present (`/api/auth/signup`, `/api/auth/login`).
-- **Password hashing**: Present via user model password compare/hash flow.
-- **JWT auth**: Present (`generateToken`, JWT verification in auth middleware).
-- **Protected routes**: Present (`router.use(authMiddleware)` in task/workspace routes).
+- **Password hashing**: Present via Sequelize `User` hooks and bcrypt comparison.
+- **JWT auth**: Present through bearer tokens and `authMiddleware`.
+- **Protected routes**: Present on task, workspace, and profile routes.
+- **OTP verification**: Present through `/api/auth/verify-email` and `/api/auth/resend-otp`.
 
-**Status:** ✅ Meets requirement.
+**Status:** Meets requirement.
 
 ### 2) Task management (multi-user)
 - **Create task**: Present (`POST /api/tasks`).
-- **View only own tasks**: Present (queries filtered by `owner: req.user.id`).
-- **Update status**: Present (`PUT /api/tasks/:id` and batch update route).
+- **View only own tasks**: Present through `ownerId` filtering.
+- **Update status/order**: Present through `PUT /api/tasks/:id` and `PUT /api/tasks/batch`.
 - **Delete task**: Present (`DELETE /api/tasks/:id`).
-- **User-task relationship**: Present (`owner` field required in `Task` model).
+- **User-task relationship**: Present through `ownerId` and workspace ownership checks.
 
-**Status:** ✅ Meets requirement.
+**Status:** Meets requirement.
 
 ### 3) Backend requirements
 - **Node.js + Express**: Present.
-- **Folder structure (controllers/routes/models)**: **Partially met** — routes and models exist, but controllers layer is not separated; route files contain controller logic.
-- **Error handling middleware**: **Not met as specified** — no centralized Express error-handler middleware; most routes use local `try/catch` and inline responses.
-- **Input validation**: Present (Zod schemas in route handlers).
+- **Folder structure**: Present (`controllers`, `routes`, `models`, `middleware`).
+- **Error handling middleware**: Present (`errorHandler`).
+- **Input validation**: Present through Zod route schemas.
 
-**Status:** ⚠️ Partially meets requirement.
+**Status:** Meets requirement.
 
 ### 4) Frontend requirements
-- **React + Tailwind**: Present (Next.js React app with Tailwind).
-- **Clean usable UI**: Present (auth pages, task/workspace pages, shadcn components).
-- **API integration**: Present (`lib/api.ts` + calls across pages).
-- **State handling**: Present (hooks + auth context).
+- **React + Tailwind**: Present through Next.js App Router and Tailwind CSS.
+- **Clean usable UI**: Present through auth pages, workspaces, Kanban board, list/table/timeline views, and settings.
+- **API integration**: Present through `lib/api.ts`.
+- **State handling**: Present through React state and auth context.
 
-**Status:** ✅ Meets requirement.
+**Status:** Meets requirement.
 
 ### 5) Database
-- **Required: PostgreSQL / Sequelize**
-- **Current: MongoDB + Mongoose**
+- **PostgreSQL / Sequelize**: Present through Neon-compatible Sequelize models for users, workspaces, and tasks.
 
-**Status:** ❌ Does not meet requirement.
-
-## Structural mismatches to fix for strict compliance
-1. Replace MongoDB/Mongoose data layer with PostgreSQL + Sequelize models/migrations.
-2. Introduce a dedicated `controllers/` layer and move handler logic out of `routes/`.
-3. Add centralized Express error-handling middleware (e.g., `app.use(errorHandler)`) and pass errors with `next(err)`.
-
-## Overall assessment
-If evaluated strictly against the **non-negotiable stack constraints**, this repo is currently **not fully compliant** due to the database/ORM mismatch and missing explicit controllers + centralized error middleware pattern.
+**Status:** Meets requirement.

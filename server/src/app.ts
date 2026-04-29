@@ -7,13 +7,26 @@ import authRoutes from './routes/auth';
 import taskRoutes from './routes/tasks';
 import workspaceRoutes from './routes/workspaces';
 import { errorHandler } from './middleware/errorHandler';
+import { connectDB } from './config';
 
 const app = express();
 app.use(morgan('dev'));
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100 }));
+
+if (process.env.NODE_ENV !== 'test') {
+  app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100 }));
+}
+
+app.use(async (_req, _res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);

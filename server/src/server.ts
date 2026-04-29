@@ -1,7 +1,7 @@
 /**
  * @file server.ts — Application entry point
  *
- * Loads environment variables, connects to MongoDB and Redis,
+ * Loads environment variables, connects to PostgreSQL,
  * then starts the Express server on the configured PORT (default: 5000).
  */
 
@@ -10,14 +10,12 @@ dotenv.config();
 
 import app from './app';
 import { connectDB } from './config';
-import redis from './config';
 
 const PORT = process.env.PORT || 5000;
 
 async function start(): Promise<void> {
   try {
     await connectDB();
-    await redis.connect();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

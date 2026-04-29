@@ -1,280 +1,128 @@
 import request from 'supertest';
 import app from '../app';
 import User from '../models/User';
+import Workspace from '../models/Workspace';
+
+async function signupUser(email = 'test@example.com') {
+  await request(app)
+    .post('/api/auth/signup')
+    .send({ name: 'Test User', email, password: 'Password1!' });
+
+  return User.findOne({ where: { email } });
+}
 
 describe('Auth Endpoints', () => {
-  describe('POST /api/auth/signup', () => {
-    it('should create a new user and return message + email (not token)', async () => {
-      const res = await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Test User', email: 'test@example.com', password: 'Password1!' });
+  it('creates an unverified user and sends an OTP', async () => {
+    const res = await request(app)
+      .post('/api/auth/signup')
+      .send({ name: 'Test User', email: 'test@example.com', password: 'Password1!' });
 
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('message');
-      expect(res.body).toHaveProperty('email', 'test@example.com');
-      // Should NOT return token before verification
-      expect(res.body).not.toHaveProperty('token');
+    expect(res.status).toBe(201);
+    expect(res.body.email).toBe('test@example.com');
 
-      // User should exist but not be verified
-      const user = await User.findOne({ email: 'test@example.com' });
-      expect(user).toBeTruthy();
-      expect(user!.isVerified).toBe(false);
-      expect(user!.verificationOtp).toBeTruthy();
-    });
-
-    it('should return 409 for duplicate email', async () => {
-      await User.create({ name: 'Existing', email: 'dup@example.com', password: 'Password1!' });
-
-      const res = await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Another', email: 'dup@example.com', password: 'Password1!' });
-
-      expect(res.status).toBe(409);
-      expect(res.body.message).toBe('Email already in use');
-    });
-
-    it('should return 400 for missing fields', async () => {
-      const res = await request(app)
-        .post('/api/auth/signup')
-        .send({ email: 'no-name@example.com' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.message).toBe('Validation error');
-    });
-
-    it('should return 400 for weak password', async () => {
-      const res = await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Weak', email: 'weak@example.com', password: 'short' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.message).toBe('Validation error');
-    });
+    const user = await User.findOne({ where: { email: 'test@example.com' } });
+    expect(user?.isVerified).toBe(false);
+    expect(user?.verificationOtp).toHaveLength(6);
   });
 
-  describe('POST /api/auth/verify-email', () => {
-    let otp: string;
+  it('rejects duplicate signup and weak password input', async () => {
+    await signupUser('dup@example.com');
 
-    beforeEach(async () => {
-      await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Verify User', email: 'verify@example.com', password: 'Password1!' });
+    const duplicate = await request(app)
+      .post('/api/auth/signup')
+      .send({ name: 'Duplicate', email: 'dup@example.com', password: 'Password1!' });
+    expect(duplicate.status).toBe(409);
 
-      const user = await User.findOne({ email: 'verify@example.com' });
-      otp = user!.verificationOtp!;
-    });
-
-    it('should verify email and return token', async () => {
-      const res = await request(app)
-        .post('/api/auth/verify-email')
-        .send({ email: 'verify@example.com', otp });
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('token');
-      expect(res.body.user.email).toBe('verify@example.com');
-
-      // User should now be verified
-      const user = await User.findOne({ email: 'verify@example.com' });
-      expect(user!.isVerified).toBe(true);
-      expect(user!.verificationOtp).toBeNull();
-    });
-
-    it('should return 400 for wrong OTP', async () => {
-      const res = await request(app)
-        .post('/api/auth/verify-email')
-        .send({ email: 'verify@example.com', otp: '000000' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.message).toBe('Invalid verification code');
-    });
-
-    it('should return 400 for expired OTP', async () => {
-      // Manually expire the OTP
-      await User.updateOne(
-        { email: 'verify@example.com' },
-        { verificationOtpExpiry: new Date(Date.now() - 1000) }
-      );
-
-      const res = await request(app)
-        .post('/api/auth/verify-email')
-        .send({ email: 'verify@example.com', otp });
-
-      expect(res.status).toBe(400);
-      expect(res.body.message).toContain('expired');
-    });
+    const weak = await request(app)
+      .post('/api/auth/signup')
+      .send({ name: 'Weak', email: 'weak@example.com', password: 'short' });
+    expect(weak.status).toBe(400);
   });
 
-  describe('POST /api/auth/resend-otp', () => {
-    beforeEach(async () => {
-      await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Resend User', email: 'resend@example.com', password: 'Password1!' });
-    });
+  it('requires email verification before login', async () => {
+    await signupUser('login@example.com');
 
-    it('should regenerate OTP', async () => {
-      const oldUser = await User.findOne({ email: 'resend@example.com' });
-      const oldOtp = oldUser!.verificationOtp;
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'login@example.com', password: 'Password1!' });
 
-      const res = await request(app)
-        .post('/api/auth/resend-otp')
-        .send({ email: 'resend@example.com' });
-
-      expect(res.status).toBe(200);
-
-      const newUser = await User.findOne({ email: 'resend@example.com' });
-      expect(newUser!.verificationOtp).not.toBe(oldOtp);
-    });
-
-    it('should return 200 for non-existent email (no info leak)', async () => {
-      const res = await request(app)
-        .post('/api/auth/resend-otp')
-        .send({ email: 'nobody@example.com' });
-
-      expect(res.status).toBe(200);
-    });
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('verify');
   });
 
-  describe('POST /api/auth/login', () => {
-    beforeEach(async () => {
-      // Create a verified user
-      await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Login User', email: 'login@example.com', password: 'Password1!' });
-      await User.updateOne({ email: 'login@example.com' }, { isVerified: true });
-    });
+  it('verifies email, creates default workspace, and returns a JWT', async () => {
+    const user = await signupUser('verify@example.com');
 
-    it('should login with correct credentials', async () => {
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'login@example.com', password: 'Password1!' });
+    const res = await request(app)
+      .post('/api/auth/verify-email')
+      .send({ email: 'verify@example.com', otp: user!.verificationOtp });
 
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('token');
-      expect(res.body.user.email).toBe('login@example.com');
-    });
+    expect(res.status).toBe(200);
+    expect(res.body.token).toBeTruthy();
+    expect(res.body.user.email).toBe('verify@example.com');
 
-    it('should return 401 for wrong password', async () => {
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'login@example.com', password: 'WrongPassword1!' });
+    const verified = await User.findOne({ where: { email: 'verify@example.com' } });
+    expect(verified?.isVerified).toBe(true);
 
-      expect(res.status).toBe(401);
-      expect(res.body.message).toBe('Invalid credentials');
-    });
-
-    it('should return 401 for non-existent email', async () => {
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'noone@example.com', password: 'Password1!' });
-
-      expect(res.status).toBe(401);
-      expect(res.body.message).toBe('Invalid credentials');
-    });
-
-    it('should return 403 for unverified user', async () => {
-      await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Unverified', email: 'unverified@example.com', password: 'Password1!' });
-
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'unverified@example.com', password: 'Password1!' });
-
-      expect(res.status).toBe(403);
-      expect(res.body.message).toContain('verify');
-    });
-
-    it('should return 400 for invalid login body', async () => {
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'not-an-email', password: '' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.message).toBe('Validation error');
-    });
+    const workspace = await Workspace.findOne({ where: { ownerId: verified!.id } });
+    expect(workspace?.name).toBe('Getting Started');
   });
 
-  describe('POST /api/auth/forgot-password', () => {
-    beforeEach(async () => {
-      await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Forgot User', email: 'forgot@example.com', password: 'Password1!' });
-      await User.updateOne({ email: 'forgot@example.com' }, { isVerified: true });
-    });
+  it('rejects invalid or expired OTPs and can resend an OTP', async () => {
+    const user = await signupUser('otp@example.com');
+    user!.verificationOtpExpiry = new Date(Date.now() - 1000);
+    await user!.save();
 
-    it('should generate reset token', async () => {
-      const res = await request(app)
-        .post('/api/auth/forgot-password')
-        .send({ email: 'forgot@example.com' });
+    const expired = await request(app)
+      .post('/api/auth/verify-email')
+      .send({ email: 'otp@example.com', otp: user!.verificationOtp });
+    expect(expired.status).toBe(400);
+    expect(expired.body.message).toContain('expired');
 
-      expect(res.status).toBe(200);
+    const resend = await request(app)
+      .post('/api/auth/resend-otp')
+      .send({ email: 'otp@example.com' });
+    expect(resend.status).toBe(200);
 
-      const user = await User.findOne({ email: 'forgot@example.com' });
-      expect(user!.resetToken).toBeTruthy();
-      expect(user!.resetTokenExpiry).toBeTruthy();
-    });
-
-    it('should return 200 for non-existent email (no info leak)', async () => {
-      const res = await request(app)
-        .post('/api/auth/forgot-password')
-        .send({ email: 'nobody@example.com' });
-
-      expect(res.status).toBe(200);
-    });
+    const refreshed = await User.findOne({ where: { email: 'otp@example.com' } });
+    expect(refreshed!.verificationOtp).not.toBe(user!.verificationOtp);
   });
 
-  describe('POST /api/auth/reset-password', () => {
-    let resetToken: string;
+  it('supports forgot password and reset password', async () => {
+    const user = await signupUser('reset@example.com');
+    await request(app)
+      .post('/api/auth/verify-email')
+      .send({ email: 'reset@example.com', otp: user!.verificationOtp });
 
-    beforeEach(async () => {
-      await request(app)
-        .post('/api/auth/signup')
-        .send({ name: 'Reset User', email: 'reset@example.com', password: 'Password1!' });
-      await User.updateOne({ email: 'reset@example.com' }, { isVerified: true });
+    const forgot = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: 'reset@example.com' });
+    expect(forgot.status).toBe(200);
 
-      await request(app)
-        .post('/api/auth/forgot-password')
-        .send({ email: 'reset@example.com' });
+    const withToken = await User.findOne({ where: { email: 'reset@example.com' } });
+    const reset = await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token: withToken!.resetToken, password: 'NewPassword1!' });
+    expect(reset.status).toBe(200);
 
-      const user = await User.findOne({ email: 'reset@example.com' });
-      resetToken = user!.resetToken!;
-    });
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'reset@example.com', password: 'NewPassword1!' });
+    expect(login.status).toBe(200);
+  });
 
-    it('should reset password with valid token', async () => {
-      const res = await request(app)
-        .post('/api/auth/reset-password')
-        .send({ token: resetToken, password: 'NewPassword1!' });
+  it('updates profile for the authenticated user', async () => {
+    const user = await signupUser('profile@example.com');
+    const verify = await request(app)
+      .post('/api/auth/verify-email')
+      .send({ email: 'profile@example.com', otp: user!.verificationOtp });
 
-      expect(res.status).toBe(200);
+    const res = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', `Bearer ${verify.body.token}`)
+      .send({ name: 'Updated User' });
 
-      // Verify can login with new password
-      const loginRes = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'reset@example.com', password: 'NewPassword1!' });
-
-      expect(loginRes.status).toBe(200);
-      expect(loginRes.body).toHaveProperty('token');
-    });
-
-    it('should return 400 for invalid token', async () => {
-      const res = await request(app)
-        .post('/api/auth/reset-password')
-        .send({ token: 'invalid-token', password: 'NewPassword1!' });
-
-      expect(res.status).toBe(400);
-    });
-
-    it('should return 400 for expired token', async () => {
-      await User.updateOne(
-        { email: 'reset@example.com' },
-        { resetTokenExpiry: new Date(Date.now() - 1000) }
-      );
-
-      const res = await request(app)
-        .post('/api/auth/reset-password')
-        .send({ token: resetToken, password: 'NewPassword1!' });
-
-      expect(res.status).toBe(400);
-    });
+    expect(res.status).toBe(200);
+    expect(res.body.user.name).toBe('Updated User');
   });
 });

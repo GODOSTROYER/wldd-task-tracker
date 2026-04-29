@@ -72,7 +72,7 @@ function VerifyEmailContent() {
         body: { email, otp: code },
       });
       setToken(data.token, data.user);
-      router.push('/tasks');
+      router.push('/workspaces');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed');
       setOtp(['', '', '', '', '', '']);

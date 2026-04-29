@@ -1,41 +1,33 @@
-import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+process.env.JWT_SECRET ||= 'test_secret';
+process.env.SMTP_HOST ||= 'smtp.example.com';
+process.env.SMTP_PORT ||= '587';
+process.env.SMTP_USER ||= 'test@example.com';
+process.env.SMTP_PASS ||= 'test-password';
+process.env.FROM_EMAIL ||= 'test@example.com';
+process.env.FRONTEND_URL ||= 'http://localhost:3000';
 
-let mongoServer: MongoMemoryServer;
+jest.setTimeout(60000);
 
-// Mock ioredis with ioredis-mock before any imports that use it
-jest.mock('ioredis', () => {
-  const RedisMock = require('ioredis-mock');
-  return RedisMock;
-});
-
-// Mock Nodemailer so tests don't send real emails
 jest.mock('nodemailer', () => ({
   createTransport: jest.fn().mockReturnValue({
     sendMail: jest.fn().mockResolvedValue({ messageId: 'mock-message-id' }),
   }),
 }));
 
+import { sequelize } from '../config';
+import Task from '../models/Task';
+import Workspace from '../models/Workspace';
+import User from '../models/User';
+import '../models';
+
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const uri = mongoServer.getUri();
-  await mongoose.connect(uri);
+  await sequelize.sync({ force: true });
 });
 
 afterEach(async () => {
-  // Clear all collections between tests
-  const collections = mongoose.connection.collections;
-  for (const key in collections) {
-    await collections[key].deleteMany({});
-  }
-
-  // Clear redis mock
-  const Redis = require('ioredis');
-  const redis = new Redis();
-  await redis.flushall();
+  await sequelize.query('TRUNCATE TABLE "tasks", "workspaces", "users" RESTART IDENTITY CASCADE');
 });
 
 afterAll(async () => {
-  await mongoose.disconnect();
-  await mongoServer.stop();
+  await sequelize.close();
 });

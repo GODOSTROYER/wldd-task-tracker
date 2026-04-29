@@ -16,9 +16,9 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 interface Workspace {
-  _id: string;
+  id: string;
   name: string;
-  owner: string;
+  ownerId: string;
   createdAt: string;
 }
 
@@ -67,7 +67,7 @@ export default function WorkspacesPage() {
       setWorkspaces((prev) => [created, ...prev]);
       setIsDialogOpen(false);
       setNewName("");
-      router.push(`/workspaces/${created._id}`);
+      router.push(`/workspaces/${created.id}`);
     } catch (err) {
       console.error(err);
     } finally {
@@ -107,8 +107,8 @@ export default function WorkspacesPage() {
           const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
           return (
             <button
-              key={ws._id}
-              onClick={() => router.push(`/workspaces/${ws._id}`)}
+              key={ws.id}
+              onClick={() => router.push(`/workspaces/${ws.id}`)}
               className={cn(
                 "group text-left bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden",
                 "hover:shadow-lg hover:ring-1 transition-all duration-150",

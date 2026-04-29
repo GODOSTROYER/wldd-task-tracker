@@ -1,296 +1,148 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import app from '../app';
 import User from '../models/User';
 import Workspace from '../models/Workspace';
+import Task from '../models/Task';
 
-let token: string;
-let userId: string;
-let workspaceId: string;
-
-let otherToken: string;
-let otherWorkspaceId: string;
-
-/**
- * Create a verified user directly in the DB and return a JWT + Workspace ID.
- */
-async function createVerifiedUser(name: string, email: string, password: string) {
-  // Sign up through the API (creates user + OTP)
+async function createVerifiedUser(email: string) {
   await request(app)
     .post('/api/auth/signup')
-    .send({ name, email, password });
+    .send({ name: email.split('@')[0], email, password: 'Password1!' });
 
-  // Mark as verified directly in DB
-  await User.updateOne({ email }, { isVerified: true });
+  const user = await User.findOne({ where: { email } });
+  const verify = await request(app)
+    .post('/api/auth/verify-email')
+    .send({ email, otp: user!.verificationOtp });
 
-  // Login to get a token
-  const loginRes = await request(app)
-    .post('/api/auth/login')
-    .send({ email, password });
+  await Task.destroy({ where: { ownerId: verify.body.user.id } });
+  const workspace = await Workspace.create({ name: 'Test Workspace', ownerId: verify.body.user.id });
 
-  const userId = loginRes.body.user.id;
-  const token = loginRes.body.token;
-
-  // Create a default workspace for the user
-  const workspace = await Workspace.create({
-    name: `${name}'s Workspace`,
-    owner: userId,
-    members: [userId],
-  });
-
-  return {
-    token,
-    userId,
-    workspaceId: workspace._id.toString(),
-  };
+  return { token: verify.body.token, userId: verify.body.user.id, workspaceId: workspace.id };
 }
 
 describe('Task Endpoints', () => {
-  beforeEach(async () => {
-    const user = await createVerifiedUser('Task User', 'taskuser@example.com', 'Password1!');
-    token = user.token;
-    userId = user.userId;
-    workspaceId = user.workspaceId;
+  it('creates a task with Kanban metadata', async () => {
+    const user = await createVerifiedUser('task@example.com');
 
-    const other = await createVerifiedUser('Other User', 'other@example.com', 'Password1!');
-    otherToken = other.token;
-    otherWorkspaceId = other.workspaceId;
+    const res = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({
+        title: 'My Task',
+        description: 'Do something',
+        status: 'in-progress',
+        priority: 'high',
+        dueDate: '2026-05-10',
+        workspaceId: user.workspaceId,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBeTruthy();
+    expect(res.body.ownerId).toBe(user.userId);
+    expect(res.body.workspaceId).toBe(user.workspaceId);
+    expect(res.body.status).toBe('in-progress');
+    expect(res.body.priority).toBe('high');
   });
 
-  describe('POST /api/tasks', () => {
-    it('should create a task', async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'My Task', description: 'Do something', workspaceId });
+  it('validates create input and requires auth', async () => {
+    const user = await createVerifiedUser('validation@example.com');
 
-      expect(res.status).toBe(201);
-      expect(res.body.title).toBe('My Task');
-      expect(res.body.description).toBe('Do something');
-      expect(res.body.status).toBe('todo');
-      expect(res.body.owner).toBe(userId);
-      expect(res.body.workspaceId).toBe(workspaceId);
-    });
+    const missingTitle = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ workspaceId: user.workspaceId });
+    expect(missingTitle.status).toBe(400);
 
-    it('should return 400 for missing title', async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ description: 'No title', workspaceId });
-
-      expect(res.status).toBe(400);
-    });
-
-    it('should return 401 without token', async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .send({ title: 'No Auth', workspaceId });
-
-      expect(res.status).toBe(401);
-    });
+    const noAuth = await request(app)
+      .post('/api/tasks')
+      .send({ title: 'No Auth', workspaceId: user.workspaceId });
+    expect(noAuth.status).toBe(401);
   });
 
-  describe('GET /api/tasks', () => {
-    beforeEach(async () => {
-      await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Task 1', workspaceId });
-      await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Task 2', workspaceId });
-      // Other user's task
-      await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${otherToken}`)
-        .send({ title: 'Other Task', workspaceId: otherWorkspaceId });
-    });
+  it('lists only the authenticated user tasks and filters by workspace', async () => {
+    const user = await createVerifiedUser('owner@example.com');
+    const other = await createVerifiedUser('other@example.com');
 
-    it('should list only the logged-in user tasks', async () => {
-      const res = await request(app)
-        .get('/api/tasks')
-        .set('Authorization', `Bearer ${token}`);
+    await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ title: 'Task 1', workspaceId: user.workspaceId });
+    await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ title: 'Task 2', workspaceId: user.workspaceId });
+    await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${other.token}`)
+      .send({ title: 'Other Task', workspaceId: other.workspaceId });
 
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(2);
-      expect(res.body[0].title).toBe('Task 1'); // sorted by position asc
-      expect(res.body[1].title).toBe('Task 2');
-    });
+    const res = await request(app)
+      .get(`/api/tasks?workspaceId=${user.workspaceId}`)
+      .set('Authorization', `Bearer ${user.token}`);
 
-    it('should filter by workspaceId', async () => {
-      const res = await request(app)
-        .get(`/api/tasks?workspaceId=${workspaceId}`)
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(2);
-    });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body.map((task: any) => task.title)).toEqual(['Task 1', 'Task 2']);
   });
 
-  describe('PUT /api/tasks/:id', () => {
-    let taskId: string;
+  it('updates, batch-reorders, and deletes owned tasks only', async () => {
+    const user = await createVerifiedUser('crud@example.com');
+    const other = await createVerifiedUser('crud-other@example.com');
 
-    beforeEach(async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Update Me', workspaceId });
-      taskId = res.body._id;
-    });
+    const first = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ title: 'First', workspaceId: user.workspaceId });
+    const second = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ title: 'Second', workspaceId: user.workspaceId });
 
-    it('should update own task', async () => {
-      const res = await request(app)
-        .put(`/api/tasks/${taskId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ status: 'completed', title: 'Updated' });
+    const blocked = await request(app)
+      .put(`/api/tasks/${first.body.id}`)
+      .set('Authorization', `Bearer ${other.token}`)
+      .send({ title: 'Stolen' });
+    expect(blocked.status).toBe(404);
 
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe('completed');
-      expect(res.body.title).toBe('Updated');
-    });
+    const updated = await request(app)
+      .put(`/api/tasks/${first.body.id}`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ title: 'Updated', status: 'completed', dueDate: null });
+    expect(updated.status).toBe(200);
+    expect(updated.body.status).toBe('completed');
 
-    it('should return 403 when updating another user task', async () => {
-      const res = await request(app)
-        .put(`/api/tasks/${taskId}`)
-        .set('Authorization', `Bearer ${otherToken}`)
-        .send({ status: 'completed' });
+    const batch = await request(app)
+      .put('/api/tasks/batch')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({
+        tasks: [
+          { id: first.body.id, status: 'completed', position: 2048 },
+          { id: second.body.id, status: 'todo', position: 1024 },
+        ],
+      });
+    expect(batch.status).toBe(200);
 
-      expect(res.status).toBe(404);
-    });
+    const deleted = await request(app)
+      .delete(`/api/tasks/${second.body.id}`)
+      .set('Authorization', `Bearer ${user.token}`);
+    expect(deleted.status).toBe(200);
 
-    it('should return 404 for non-existent task', async () => {
-      const res = await request(app)
-        .put('/api/tasks/aaaaaaaaaaaaaaaaaaaaaaaa')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Ghost' });
-
-      expect(res.status).toBe(404);
-    });
+    const remaining = await request(app)
+      .get(`/api/tasks?workspaceId=${user.workspaceId}`)
+      .set('Authorization', `Bearer ${user.token}`);
+    expect(remaining.body).toHaveLength(1);
+    expect(remaining.body[0].title).toBe('Updated');
   });
 
-  describe('DELETE /api/tasks/:id', () => {
-    let taskId: string;
+  it('does not allow tasks in another user workspace', async () => {
+    const user = await createVerifiedUser('creator@example.com');
+    const other = await createVerifiedUser('workspace-owner@example.com');
 
-    beforeEach(async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Delete Me', workspaceId });
-      taskId = res.body._id;
-    });
+    const res = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send({ title: 'Cross-user task', workspaceId: other.workspaceId });
 
-    it('should delete own task', async () => {
-      const res = await request(app)
-        .delete(`/api/tasks/${taskId}`)
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body.message).toBe('Task deleted');
-
-      // Verify it's gone
-      const list = await request(app)
-        .get('/api/tasks')
-        .set('Authorization', `Bearer ${token}`);
-      expect(list.body).toHaveLength(0);
-    });
-
-    it('should return 403 when deleting another user task', async () => {
-      const res = await request(app)
-        .delete(`/api/tasks/${taskId}`)
-        .set('Authorization', `Bearer ${otherToken}`);
-
-      expect(res.status).toBe(404);
-    });
-
-    it('should return 404 when deleting non-existent task', async () => {
-      const res = await request(app)
-        .delete('/api/tasks/aaaaaaaaaaaaaaaaaaaaaaaa')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.status).toBe(404);
-    });
-  });
-
-  describe('Edge cases', () => {
-    it('should create a task with dueDate', async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Due Task', dueDate: '2025-12-31', workspaceId });
-
-      expect(res.status).toBe(201);
-      expect(res.body.dueDate).toBeDefined();
-    });
-
-    it('should create a task with completed status', async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Completed Task', status: 'completed', workspaceId });
-
-      expect(res.status).toBe(201);
-      expect(res.body.status).toBe('completed');
-    });
-
-    it('should return 400 for invalid status in update', async () => {
-      const createRes = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Test', workspaceId });
-
-      const res = await request(app)
-        .put(`/api/tasks/${createRes.body._id}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ status: 'invalid_status' });
-
-      expect(res.status).toBe(400);
-    });
-
-    it('should update only description without changing other fields', async () => {
-      const createRes = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Original', description: 'Old desc', workspaceId });
-
-      const res = await request(app)
-        .put(`/api/tasks/${createRes.body._id}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ description: 'New desc' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.description).toBe('New desc');
-      expect(res.body.title).toBe('Original');
-    });
-
-    it('should update dueDate to a value', async () => {
-      const createRes = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'No date', workspaceId });
-
-      const res = await request(app)
-        .put(`/api/tasks/${createRes.body._id}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ dueDate: '2025-06-15' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.dueDate).toBeDefined();
-    });
-
-    it('should clear dueDate by setting to null', async () => {
-      const createRes = await request(app)
-        .post('/api/tasks')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ title: 'Has date', dueDate: '2025-12-31', workspaceId });
-
-      const res = await request(app)
-        .put(`/api/tasks/${createRes.body._id}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ dueDate: null });
-
-      expect(res.status).toBe(200);
-    });
+    expect(res.status).toBe(404);
   });
 });

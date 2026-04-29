@@ -2,7 +2,7 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import bcrypt from 'bcrypt';
 import { sequelize } from '../config';
 
-interface UserAttrs {
+export interface UserAttrs {
   id: string;
   name: string;
   email: string;
@@ -33,9 +33,14 @@ User.init({
   verificationOtpExpiry: { type: DataTypes.DATE, allowNull: true },
   resetToken: { type: DataTypes.STRING, allowNull: true },
   resetTokenExpiry: { type: DataTypes.DATE, allowNull: true },
-}, { sequelize, tableName: 'users', hooks: {
-  beforeCreate: async (user) => { user.password = await bcrypt.hash(user.password, 10); },
-  beforeUpdate: async (user) => { if (user.changed('password')) user.password = await bcrypt.hash(user.password, 10); }
-}});
+}, {
+  sequelize,
+  tableName: 'users',
+  indexes: [{ unique: true, fields: ['email'] }],
+  hooks: {
+    beforeCreate: async (user) => { user.password = await bcrypt.hash(user.password, 10); },
+    beforeUpdate: async (user) => { if (user.changed('password')) user.password = await bcrypt.hash(user.password, 10); },
+  },
+});
 
 export default User;
