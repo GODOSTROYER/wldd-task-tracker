@@ -1,19 +1,9 @@
-/**
- * @file models/User.ts — Mongoose User schema and model
- *
- * Defines the IUser interface and UserSchema with email/password auth,
- * OTP-based email verification, and token-based password reset.
- *
- * Key behaviors:
- *   - Pre-save hook auto-hashes passwords with bcrypt (10 salt rounds)
- *   - comparePassword() method for login credential validation
- *
- * Exports: User model, IUser interface
- */
-import mongoose, { Schema, Document } from 'mongoose';
+import { DataTypes, Model, Optional } from 'sequelize';
 import bcrypt from 'bcrypt';
+import { sequelize } from '../config';
 
-export interface IUser extends Document {
+interface UserAttrs {
+  id: string;
   name: string;
   email: string;
   password: string;
@@ -22,65 +12,30 @@ export interface IUser extends Document {
   verificationOtpExpiry: Date | null;
   resetToken: string | null;
   resetTokenExpiry: Date | null;
-  createdAt: Date;
-  comparePassword(candidate: string): Promise<boolean>;
 }
 
-const UserSchema = new Schema<IUser>(
-  {
-    name: {
-      type: String,
-      required: [true, 'Name is required'],
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: [true, 'Email is required'],
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    password: {
-      type: String,
-      required: [true, 'Password is required'],
-      minlength: [8, 'Password must be at least 8 characters'],
-    },
-    isVerified: {
-      type: Boolean,
-      default: false,
-    },
-    verificationOtp: {
-      type: String,
-      default: null,
-    },
-    verificationOtpExpiry: {
-      type: Date,
-      default: null,
-    },
-    resetToken: {
-      type: String,
-      default: null,
-    },
-    resetTokenExpiry: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: { createdAt: 'createdAt', updatedAt: false },
-  }
-);
+type UserCreationAttrs = Optional<UserAttrs, 'id' | 'isVerified' | 'verificationOtp' | 'verificationOtpExpiry' | 'resetToken' | 'resetTokenExpiry'>;
 
-UserSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
+class User extends Model<UserAttrs, UserCreationAttrs> implements UserAttrs {
+  declare id: string; declare name: string; declare email: string; declare password: string;
+  declare isVerified: boolean; declare verificationOtp: string | null; declare verificationOtpExpiry: Date | null;
+  declare resetToken: string | null; declare resetTokenExpiry: Date | null;
+  async comparePassword(candidate: string): Promise<boolean> { return bcrypt.compare(candidate, this.password); }
+}
 
-UserSchema.methods.comparePassword = async function (candidate: string): Promise<boolean> {
-  return bcrypt.compare(candidate, this.password);
-};
+User.init({
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  name: { type: DataTypes.STRING, allowNull: false },
+  email: { type: DataTypes.STRING, allowNull: false, unique: true },
+  password: { type: DataTypes.STRING, allowNull: false },
+  isVerified: { type: DataTypes.BOOLEAN, defaultValue: false },
+  verificationOtp: { type: DataTypes.STRING, allowNull: true },
+  verificationOtpExpiry: { type: DataTypes.DATE, allowNull: true },
+  resetToken: { type: DataTypes.STRING, allowNull: true },
+  resetTokenExpiry: { type: DataTypes.DATE, allowNull: true },
+}, { sequelize, tableName: 'users', hooks: {
+  beforeCreate: async (user) => { user.password = await bcrypt.hash(user.password, 10); },
+  beforeUpdate: async (user) => { if (user.changed('password')) user.password = await bcrypt.hash(user.password, 10); }
+}});
 
-const User = mongoose.model<IUser>('User', UserSchema);
 export default User;
