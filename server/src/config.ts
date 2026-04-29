@@ -4,6 +4,9 @@ import { Sequelize, SyncOptions } from 'sequelize';
 dotenv.config();
 dotenv.config({ path: 'server/.env' });
 
+// Make the Postgres driver explicit so Vercel's function tracer includes it.
+const pg = require('pg');
+
 const databaseUrl = process.env.NODE_ENV === 'test'
   ? process.env.DATABASE_URL_TEST || process.env.DATABASE_URL
   : process.env.DATABASE_URL;
@@ -14,6 +17,7 @@ if (!databaseUrl) {
 
 export const sequelize = new Sequelize(databaseUrl || 'postgres://postgres:postgres@localhost:5432/task_tracker', {
   dialect: 'postgres',
+  dialectModule: pg,
   logging: false,
   pool: {
     max: 3,
