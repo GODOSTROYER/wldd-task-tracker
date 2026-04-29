@@ -41,7 +41,7 @@ describe('Workspace Endpoints', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(201);
-      expect(res.body.name).toContain('Hire Arnav');
+      expect(res.body.name).toContain('Getting Started');
       
       const workspaceId = res.body._id;
       const tasks = await Task.find({ workspaceId });
