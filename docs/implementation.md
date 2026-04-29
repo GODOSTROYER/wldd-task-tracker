@@ -51,6 +51,6 @@ Routing is modularized by entity:
 
 Tests are executed utilizing the Jest framework combined with Supertest for API integration testing.
 
-- **`mongodb-memory-server`**: Used to spin up an ephemeral MongoDB instance during the test lifecycle, removing external database dependencies.
+- **`PostgreSQL test database`**: Used to spin up an isolated PostgreSQL schema during the test lifecycle, removing external database dependencies.
 - **`ioredis-mock`**: Subbed in for an actual Redis server to validate caching logic predictably.
 - Target coverage is defined at ≥ 70% across all vital metrics (statements, branches, functions, lines).

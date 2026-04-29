@@ -1,41 +1,14 @@
-/**
- * @file models/Workspace.ts — Mongoose Workspace schema and model
- *
- * Workspaces group tasks together. Each workspace has an owner and a members
- * array for future collaboration features.
- *
- * Exports: Workspace model, IWorkspace interface
- */
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import { DataTypes, Model, Optional } from 'sequelize';
+import { sequelize } from '../config';
 
-export interface IWorkspace extends Document {
-  name: string;
-  owner: Types.ObjectId;
-  members: Types.ObjectId[];
-  createdAt: Date;
-}
+interface WorkspaceAttrs { id: string; name: string; ownerId: string; }
+type CreateAttrs = Optional<WorkspaceAttrs, 'id'>;
+class Workspace extends Model<WorkspaceAttrs, CreateAttrs> implements WorkspaceAttrs { declare id: string; declare name: string; declare ownerId: string; }
 
-const WorkspaceSchema = new Schema<IWorkspace>(
-  {
-    name: {
-      type: String,
-      required: [true, 'Workspace name is required'],
-      trim: true,
-    },
-    owner: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    members: [{
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-    }],
-  },
-  {
-    timestamps: { createdAt: 'createdAt', updatedAt: false },
-  }
-);
+Workspace.init({
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  name: { type: DataTypes.STRING, allowNull: false },
+  ownerId: { type: DataTypes.UUID, allowNull: false },
+}, { sequelize, tableName: 'workspaces' });
 
-const Workspace = mongoose.model<IWorkspace>('Workspace', WorkspaceSchema);
 export default Workspace;
